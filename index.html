@@ -88,9 +88,9 @@
 "use strict";
 
 /* ================= Sabitler ================= */
-const COLS = 12, ROWS = 12, GRID_H = ROWS + 5;
+const COLS = 18, ROWS = 12, GRID_H = ROWS + 5;
 const DELTA = Math.PI * 2 / COLS;          // bir dilimin açısı
-const R_IN = 1.42, R_OUT = 2.42;           // silindir iç/dış yarıçap
+const R_IN = 2.40, R_OUT = 3.40;           // silindir iç/dış yarıçap (hücre ~küp oranında)
 const R_MID = (R_IN + R_OUT) / 2, THICK = (R_OUT - R_IN) / 2;
 const CELL_H = 1;
 const GRAVITY_MS = 800, SOFT_MS = 45, LOCK_MS = 320, CLEAR_MS = 380, FALL_MS = 420;
@@ -239,7 +239,7 @@ function spawnPiece(){
   const key = nextFromBag();
   const p = PIECES[key];
   const col = frontColCont();
-  const pc = { key, color: p.color, cells: p.cells.map(c => c.slice()), col, row: ROWS, visRow: ROWS + 1.5 };
+  const pc = { key, color: p.color, cells: p.cells.map(c => c.slice()), col, row: ROWS, visRow: ROWS + 0.8 };
   if (collides(pc.cells, pc.col, pc.row)) { gameOver(); return; }
   piece = pc;
   gravAcc = 0; lockT = 0; lockResets = 0;
@@ -480,7 +480,7 @@ bindHold("tbHard", () => hardDrop(), null, false);
 /* ================= 3D projeksiyon (el yapımı) ================= */
 const ctx2d = canvas.getContext("2d");
 let W = 0, H = 0, DPR = 1;
-const TILT = 0.42, CAM_DIST = 15, LOOK_Y = ROWS * 0.42;
+const TILT = 0.55, CAM_DIST = 30, LOOK_Y = ROWS * 0.40;
 const cosT = Math.cos(TILT), sinT = Math.sin(TILT);
 let SCALE = 100, OFFX = 0, OFFY = 0;
 
@@ -515,9 +515,12 @@ function resize(){
       minY = Math.min(minY, py); maxY = Math.max(maxY, py);
     }
   }
-  SCALE = Math.min(W*0.95/(maxX-minX), H*0.94/(maxY-minY));
+  // dokunmatik cihazlarda alt buton şeridine yer bırak
+  const reserve = window.matchMedia("(pointer: coarse)").matches ? 90 : 0;
+  const availH = H - reserve;
+  SCALE = Math.min(W*0.95/(maxX-minX), availH*0.94/(maxY-minY));
   OFFX = W/2 - SCALE*(minX+maxX)/2;
-  OFFY = H/2 - SCALE*(minY+maxY)/2;
+  OFFY = availH/2 - SCALE*(minY+maxY)/2;
 }
 window.addEventListener("resize", resize);
 resize();
@@ -580,13 +583,18 @@ function drawCube(verts, color, { alpha = 1, bright = 1, outline = true } = {}){
     const diff = Math.max(0, (n[0]*LIGHT[0] + n[1]*LIGHT[1] + n[2]*LIGHT[2])/nl);
     const b = (0.78 + 0.45*diff) * bright;
     const pts = [scr[i0], scr[i1], scr[i2], scr[i3]];
+    const fill = shade(color, b);
     poly(pts);
-    ctx2d.fillStyle = shade(color, b);
+    ctx2d.fillStyle = fill;
     ctx2d.fill();
+    // komşu yüzeyler arasındaki antialias çizgisini (boşluk görüntüsünü) kendi rengiyle kapat
+    ctx2d.strokeStyle = fill;
+    ctx2d.lineWidth = 1;
+    ctx2d.lineJoin = "round";
+    ctx2d.stroke();
     if (outline){
       ctx2d.strokeStyle = "#000";
-      ctx2d.lineWidth = Math.max(1, SCALE*0.0055);
-      ctx2d.lineJoin = "round";
+      ctx2d.lineWidth = Math.max(0.6, SCALE*0.0012);
       ctx2d.stroke();
     }
   }
@@ -673,9 +681,69 @@ function drawPedestal(){
   ctx2d.restore();
 }
 
+// silindir yüzeyinde ince kılavuz kafes: satır halkaları + sütun sınırı dikey çizgiler
+function drawCage(){
+  const R = R_OUT + 0.01;
+  ctx2d.strokeStyle = "#444";
+  ctx2d.lineWidth = 1;
+  ctx2d.globalAlpha = 0.10;
+  for (let r = 0; r <= ROWS; r++){
+    ctx2d.beginPath();
+    for (let i = 0; i <= 60; i++){
+      const th = i/60 * Math.PI*2;
+      const [px, py] = proj(R*Math.cos(th), r*CELL_H, R*Math.sin(th));
+      if (i === 0) ctx2d.moveTo(px, py); else ctx2d.lineTo(px, py);
+    }
+    ctx2d.closePath();
+    ctx2d.stroke();
+  }
+  for (let c = 0; c < COLS; c++){
+    const th = c*DELTA + towerAngle;
+    const x = R*Math.cos(th), z = R*Math.sin(th);
+    const [x0, y0] = proj(x, 0, z);
+    const [x1, y1] = proj(x, ROWS*CELL_H, z);
+    ctx2d.beginPath();
+    ctx2d.moveTo(x0, y0);
+    ctx2d.lineTo(x1, y1);
+    ctx2d.stroke();
+  }
+  ctx2d.globalAlpha = 1;
+}
+
+// düşen parçanın kapladığı sütunları yüzeyde renkli şeritle işaretle (nereye ineceği net görünsün)
+function drawColumnGuides(){
+  const R = R_OUT + 0.02;
+  const cols = [...new Set(piece.cells.map(([dc]) => piece.col + dc))];
+  for (const col of cols){
+    const a0 = col*DELTA + towerAngle, a1 = a0 + DELTA;
+    ctx2d.beginPath();
+    for (let i = 0; i <= 4; i++){
+      const th = a0 + (a1-a0)*i/4;
+      const [px, py] = proj(R*Math.cos(th), 0, R*Math.sin(th));
+      if (i === 0) ctx2d.moveTo(px, py); else ctx2d.lineTo(px, py);
+    }
+    for (let i = 4; i >= 0; i--){
+      const th = a0 + (a1-a0)*i/4;
+      const [px, py] = proj(R*Math.cos(th), ROWS*CELL_H, R*Math.sin(th));
+      ctx2d.lineTo(px, py);
+    }
+    ctx2d.closePath();
+    ctx2d.globalAlpha = 0.12;
+    ctx2d.fillStyle = piece.color;
+    ctx2d.fill();
+    ctx2d.globalAlpha = 0.30;
+    ctx2d.strokeStyle = piece.color;
+    ctx2d.lineWidth = 1;
+    ctx2d.stroke();
+  }
+  ctx2d.globalAlpha = 1;
+}
+
 function render(now){
   ctx2d.clearRect(0, 0, W, H);
   drawPedestal();
+  drawCage();
+  if (piece && state === "playing") drawColumnGuides();
 
   const list = []; // { depth, draw() }
   const pushCube = (colCont, row, color, opts, xform) => {
@@ -715,11 +783,11 @@ function render(now){
   }
 
   if (piece && state === "playing"){
-    // gölge (hayalet)
+    // gölge (hayalet): ineceği yer belirgin görünsün
     const gRow = dropRow();
-    if (gRow < piece.visRow - 0.4){
+    if (gRow < piece.row){
       for (const [dc, dr] of piece.cells){
-        pushCube(piece.col + dc, gRow + dr, piece.color, { alpha: 0.20, outline: false }, {});
+        pushCube(piece.col + dc, gRow + dr, piece.color, { alpha: 0.42, outline: true }, {});
       }
     }
     // düşen parça
