@@ -533,70 +533,100 @@ function poly(pts){
   ctx2d.closePath();
 }
 
-// hücre köşeleri: silindir yüzeyinde, düşüş ofseti uygulanmış 8 nokta
-function cellVerts(colCont, row, { yOff = 0 } = {}){
-  const aC = (colCont + 0.5)*DELTA + towerAngle;
-  const aH = DELTA/2;
-  const tH = THICK;
-  const yB = (row + yOff) * CELL_H;
-  const verts = [];
-  for (const dy of [0, 1]){
-    const y = yB + dy*CELL_H;
-    for (const dr of [-1, 1]){
-      const R = R_MID + dr*tH;
-      for (const da of [-1, 1]){
-        const th = aC + da*aH;
-        verts.push([R*Math.cos(th), y, R*Math.sin(th)]);
-      }
-    }
-  }
-  // indeks: dy*4 + dr*2 + da → 0:(alt,iç,-a) 1:(alt,iç,+a) 2:(alt,dış,-a) 3:(alt,dış,+a) 4..7 üst
-  return verts;
-}
-
-// yüzler (dışa bakan normal ile CCW sarım)
-const FACES = [
-  { idx: [2,3,7,6] }, // dış
-  { idx: [1,0,4,5] }, // iç
-  { idx: [6,7,5,4] }, // üst
-  { idx: [0,1,3,2] }, // alt
-  { idx: [0,2,6,4] }, // yan (-a)
-  { idx: [3,1,5,7] }, // yan (+a)
-];
-
 const LIGHT = (() => { const l = [-0.45, 0.75, -0.5]; const n = Math.hypot(...l); return l.map(v => v/n); })();
 
-function drawCube(verts, color, { alpha = 1, bright = 1, outline = true } = {}){
-  const cam = verts.map(v => camSpace(v[0], v[1], v[2]));
-  const scr = cam.map(c => [OFFX + c[0]/c[2]*SCALE, OFFY - c[1]/c[2]*SCALE]);
-  ctx2d.globalAlpha = alpha;
-  for (const face of FACES){
-    const [i0, i1, i2, i3] = face.idx;
-    const e1 = [cam[i1][0]-cam[i0][0], cam[i1][1]-cam[i0][1], cam[i1][2]-cam[i0][2]];
-    const e2 = [cam[i3][0]-cam[i0][0], cam[i3][1]-cam[i0][1], cam[i3][2]-cam[i0][2]];
-    const n = [e1[1]*e2[2]-e1[2]*e2[1], e1[2]*e2[0]-e1[0]*e2[2], e1[0]*e2[1]-e1[1]*e2[0]];
-    const cx = (cam[i0][0]+cam[i1][0]+cam[i2][0]+cam[i3][0])/4;
-    const cy = (cam[i0][1]+cam[i1][1]+cam[i2][1]+cam[i3][1])/4;
-    const cz = (cam[i0][2]+cam[i1][2]+cam[i2][2]+cam[i3][2])/4;
-    if (n[0]*cx + n[1]*cy + n[2]*cz >= 0) continue; // arkaya bakan yüz
-    const nl = Math.hypot(n[0], n[1], n[2]) || 1;
-    const diff = Math.max(0, (n[0]*LIGHT[0] + n[1]*LIGHT[1] + n[2]*LIGHT[2])/nl);
-    const b = (0.78 + 0.45*diff) * bright;
-    const pts = [scr[i0], scr[i1], scr[i2], scr[i3]];
-    const fill = shade(color, b);
-    poly(pts);
-    ctx2d.fillStyle = fill;
-    ctx2d.fill();
-    // komşu yüzeyler arasındaki antialias çizgisini (boşluk görüntüsünü) kendi rengiyle kapat
-    ctx2d.strokeStyle = fill;
-    ctx2d.lineWidth = 1;
-    ctx2d.lineJoin = "round";
-    ctx2d.stroke();
-    if (outline){
-      ctx2d.strokeStyle = "#000";
-      ctx2d.lineWidth = Math.max(0.6, SCALE*0.0012);
-      ctx2d.stroke();
+// dışa bakan birim normali kamera uzayına çevir (yalnızca rotasyon, öteleme yok)
+function rotN(n){ return [n[0], n[1]*cosT - n[2]*sinT, n[1]*sinT + n[2]*cosT]; }
+
+const SEGS = 3;                 // silindir kavisi için açısal alt bölme sayısı
+const BG_RGB = [233, 233, 236]; // derinlik sisinin hedef tonu (arka plan rengi)
+
+function shadeFog(hex, k, fog){
+  const [r, g, b] = hexToRgb(hex);
+  const f = c => k >= 1 ? c + (255-c)*(k-1) : c*k;
+  const m = (c, bg) => clamp(Math.round(f(c) + (bg - f(c))*fog), 0, 255);
+  return `rgb(${m(r,BG_RGB[0])},${m(g,BG_RGB[1])},${m(b,BG_RGB[2])})`;
+}
+
+// Hücreyi silindir kavisine oturan yüzeylerle çizer.
+// skip: komşusu dolu olan yüzler hiç çizilmez → bitişik kutular tek parça görünür.
+// Derinlik sisi uzaktaki blokları arka plan tonuna çeker → ön/arka ayrımı netleşir.
+function drawCell(colCont, row, color, { alpha = 1, bright = 1, outline = true, skip = {} } = {}, yOff = 0){
+  const a0 = colCont*DELTA + towerAngle, a1 = a0 + DELTA;
+  const y0 = (row + yOff)*CELL_H, y1 = y0 + CELL_H;
+  const P = (R, th, y) => [R*Math.cos(th), y, R*Math.sin(th)];
+  const arc = (R, y, rev) => {
+    const pts = [];
+    for (let i = 0; i <= SEGS; i++) pts.push(P(R, a0 + DELTA*i/SEGS, y));
+    if (rev) pts.reverse();
+    return pts;
+  };
+
+  // yüz grupları: alt-dörtgen listesi + hücre sınırı kontur yolu
+  const groups = [];
+  for (const [R, s] of [[R_OUT, 1], [R_IN, -1]]){ // dış ve iç kavisli yüzeyler
+    const quads = [];
+    for (let i = 0; i < SEGS; i++){
+      const t0 = a0 + DELTA*i/SEGS, t1 = a0 + DELTA*(i+1)/SEGS, tm = (t0 + t1)/2;
+      quads.push({ pts: [P(R,t0,y0), P(R,t1,y0), P(R,t1,y1), P(R,t0,y1)], n: [s*Math.cos(tm), 0, s*Math.sin(tm)] });
     }
+    groups.push({ quads, border: arc(R, y0, false).concat(arc(R, y1, true)) });
+  }
+  for (const [y, ny, skipIt] of [[y1, 1, skip.top], [y0, -1, skip.bottom]]){ // üst ve alt
+    if (skipIt) continue;
+    const quads = [];
+    for (let i = 0; i < SEGS; i++){
+      const t0 = a0 + DELTA*i/SEGS, t1 = a0 + DELTA*(i+1)/SEGS;
+      quads.push({ pts: [P(R_IN,t0,y), P(R_OUT,t0,y), P(R_OUT,t1,y), P(R_IN,t1,y)], n: [0, ny, 0] });
+    }
+    groups.push({ quads, border: arc(R_IN, y, false).concat(arc(R_OUT, y, true)) });
+  }
+  for (const [th, skipIt, s] of [[a0, skip.cw, 1], [a1, skip.ccw, -1]]){ // düz yan yüzler
+    if (skipIt) continue;
+    const pts = [P(R_IN,th,y0), P(R_OUT,th,y0), P(R_OUT,th,y1), P(R_IN,th,y1)];
+    groups.push({ quads: [{ pts, n: [s*Math.sin(th), 0, -s*Math.cos(th)] }], border: pts });
+  }
+
+  // derinlik sisi katsayısı (hücre merkezinin kameraya uzaklığından)
+  const tc = (a0 + a1)/2;
+  const cc = camSpace(R_MID*Math.cos(tc), (y0 + y1)/2, R_MID*Math.sin(tc));
+  const fog = clamp((cc[2] - (CAM_DIST - R_OUT)) / (2*R_OUT), 0, 1) * 0.55;
+
+  const toScr = p => { const c = camSpace(p[0], p[1], p[2]); return [OFFX + c[0]/c[2]*SCALE, OFFY - c[1]/c[2]*SCALE]; };
+  const fills = [], borders = [];
+  for (const g of groups){
+    let any = false;
+    for (const q of g.quads){
+      const cam = q.pts.map(p => camSpace(p[0], p[1], p[2]));
+      const n = rotN(q.n);
+      const cx = (cam[0][0]+cam[1][0]+cam[2][0]+cam[3][0])/4;
+      const cy = (cam[0][1]+cam[1][1]+cam[2][1]+cam[3][1])/4;
+      const cz = (cam[0][2]+cam[1][2]+cam[2][2]+cam[3][2])/4;
+      if (n[0]*cx + n[1]*cy + n[2]*cz >= 0) continue; // arkaya bakan alt-yüzey
+      any = true;
+      const diff = Math.max(0, n[0]*LIGHT[0] + n[1]*LIGHT[1] + n[2]*LIGHT[2]);
+      fills.push({
+        pts: cam.map(c => [OFFX + c[0]/c[2]*SCALE, OFFY - c[1]/c[2]*SCALE]),
+        fill: shadeFog(color, (0.78 + 0.45*diff)*bright, fog),
+      });
+    }
+    if (any) borders.push(g.border.map(toScr));
+  }
+
+  ctx2d.globalAlpha = alpha;
+  ctx2d.lineJoin = "round";
+  for (const f of fills){ // önce tüm dolgular (dikişler kendi rengiyle kapatılır)
+    poly(f.pts);
+    ctx2d.fillStyle = f.fill;
+    ctx2d.fill();
+    ctx2d.strokeStyle = f.fill;
+    ctx2d.lineWidth = 1;
+    ctx2d.stroke();
+  }
+  if (outline){ // sonra hücre sınırı konturları (uzaktakiler siste soluklaşır)
+    ctx2d.strokeStyle = `rgba(0,0,0,${(1 - fog).toFixed(3)})`;
+    ctx2d.lineWidth = Math.max(0.6, SCALE*0.0012);
+    for (const b of borders){ poly(b); ctx2d.stroke(); }
   }
   ctx2d.globalAlpha = 1;
 }
@@ -746,14 +776,15 @@ function render(now){
   if (piece && state === "playing") drawColumnGuides();
 
   const list = []; // { depth, draw() }
-  const pushCube = (colCont, row, color, opts, xform) => {
-    const verts = cellVerts(colCont, row, xform);
-    let d = 0;
-    for (const v of verts) d += camSpace(v[0], v[1], v[2])[2];
-    list.push({ depth: d/8, draw: () => drawCube(verts, color, opts) });
+  const pushCell = (colCont, row, color, opts, yOff = 0) => {
+    const tc = (colCont + 0.5)*DELTA + towerAngle;
+    const d = camSpace(R_MID*Math.cos(tc), (row + yOff + 0.5)*CELL_H, R_MID*Math.sin(tc))[2];
+    list.push({ depth: d, draw: () => drawCell(colCont, row, color, opts, yOff) });
   };
 
   const gray = state === "gameover" ? clamp((now - gameOverT)*1.6, 0, 1) : 0;
+  // düşüş animasyonları aynı fazdaysa hücreler kaynaşık çizilir
+  const sameFall = (a, b) => a.fallFrom === b.fallFrom && a.fallT === b.fallT;
 
   // kilitli hücreler
   for (let r = 0; r < GRID_H; r++){
@@ -778,24 +809,37 @@ function render(now){
         color = `#${[rr + (l-rr)*gray, gg + (l-gg)*gray, bb + (l-bb)*gray]
           .map(v => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
       }
-      pushCube(c, r, color, { alpha, bright: bright * (1 - 0.25*gray) }, { yOff });
+      const up = r+1 < GRID_H ? grid[r+1][c] : null;
+      const down = r-1 >= 0 ? grid[r-1][c] : null;
+      const skip = {
+        cw: !!grid[r][mod(c-1, COLS)],
+        ccw: !!grid[r][mod(c+1, COLS)],
+        top: !!(up && sameFall(up, cell)),
+        bottom: !!(down && sameFall(down, cell)),
+      };
+      pushCell(c, r, color, { alpha, bright: bright * (1 - 0.25*gray), skip }, yOff);
     }
   }
 
   if (piece && state === "playing"){
+    // parça içi komşu yüzeyler çizilmez → parça yekpare görünür
+    const cellSet = new Set(piece.cells.map(([dc, dr]) => dc + "," + dr));
+    const skipFor = (dc, dr) => ({
+      cw: cellSet.has((dc-1) + "," + dr),
+      ccw: cellSet.has((dc+1) + "," + dr),
+      top: cellSet.has(dc + "," + (dr+1)),
+      bottom: cellSet.has(dc + "," + (dr-1)),
+    });
     // gölge (hayalet): ineceği yer belirgin görünsün
     const gRow = dropRow();
     if (gRow < piece.row){
       for (const [dc, dr] of piece.cells){
-        pushCube(piece.col + dc, gRow + dr, piece.color, { alpha: 0.42, outline: true }, {});
+        pushCell(piece.col + dc, gRow + dr, piece.color, { alpha: 0.42, outline: true, skip: skipFor(dc, dr) });
       }
     }
     // düşen parça
     for (const [dc, dr] of piece.cells){
-      const verts = cellVerts(piece.col + dc, piece.visRow + dr, {});
-      let d = 0;
-      for (const v of verts) d += camSpace(v[0], v[1], v[2])[2];
-      list.push({ depth: d/8, draw: () => drawCube(verts, piece.color, { bright: 1.08 }) });
+      pushCell(piece.col + dc, piece.visRow + dr, piece.color, { bright: 1.08, skip: skipFor(dc, dr) });
     }
   }
 
