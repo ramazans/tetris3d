@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Cubiq</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧊</text></svg>">
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: radial-gradient(circle at 50% 35%, #fafafa 0%, #e9e9ec 60%, #d8d8dd 100%);
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #game { display: block; width: 100vw; height: 100vh; touch-action: none; }
+
+  #mute {
+    position: fixed; top: 12px; right: 12px; z-index: 10;
+    width: 44px; height: 44px; border-radius: 50%;
+    border: none; font-size: 20px; cursor: pointer;
+    background: rgba(255,255,255,.65); box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    backdrop-filter: blur(4px);
+  }
+  #mute:active { transform: scale(.92); }
+
+  #overlay {
+    position: fixed; inset: 0; z-index: 20;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(240,240,244,.55); backdrop-filter: blur(5px);
+    text-align: center; padding: 20px;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h1 {
+    margin: 0 0 8px; font-size: clamp(48px, 12vw, 88px); letter-spacing: .06em;
+    background: linear-gradient(180deg, #ff9db0, #c9a0f5 45%, #7fd8f0);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 3px 0 rgba(0,0,0,.12));
+  }
+  #overlay p { margin: 6px 0 22px; color: #666; font-size: 15px; line-height: 1.6; }
+  #overlay button {
+    font-size: 22px; font-weight: bold; color: #fff; cursor: pointer;
+    padding: 14px 46px; border: none; border-radius: 40px;
+    background: linear-gradient(180deg, #ffb0c0, #f58c9d);
+    box-shadow: 0 6px 0 #d96e80, 0 10px 18px rgba(0,0,0,.18);
+    transition: transform .08s;
+  }
+  #overlay button:active { transform: translateY(4px); box-shadow: 0 2px 0 #d96e80; }
+
+  #touchbar {
+    position: fixed; left: 0; right: 0; bottom: max(10px, env(safe-area-inset-bottom));
+    z-index: 10; display: none; justify-content: center; gap: 10px; pointer-events: none;
+  }
+  #touchbar button {
+    pointer-events: auto;
+    width: 58px; height: 58px; border-radius: 50%; border: none;
+    font-size: 22px; color: #555;
+    background: rgba(255,255,255,.55); box-shadow: 0 2px 8px rgba(0,0,0,.18);
+    backdrop-filter: blur(4px);
+  }
+  #touchbar button:active { background: rgba(255,255,255,.9); transform: scale(.92); }
+  @media (pointer: coarse) { #touchbar { display: flex; } }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<button id="mute" title="Ses aç/kapat">🔊</button>
+
+<div id="overlay">
+  <h1>CUBIQ</h1>
+  <p id="ovMsg">
+    ← → kuleyi döndür &nbsp;•&nbsp; ↑ parçayı çevir<br>
+    ↓ hızlı indir &nbsp;•&nbsp; Boşluk: bırak &nbsp;•&nbsp; P: duraklat<br>
+    Mobilde: kaydır &amp; dokun
+  </p>
+  <button id="ovBtn">Başla</button>
+</div>
+
+<div id="touchbar">
+  <button id="tbL">◀</button>
+  <button id="tbRot">⟳</button>
+  <button id="tbSoft">▼</button>
+  <button id="tbHard">⤓</button>
+  <button id="tbR">▶</button>
+</div>
+
+<script>
+"use strict";
+
+/* ================= Sabitler ================= */
+const COLS = 12, ROWS = 12, GRID_H = ROWS + 5;
+const DELTA = Math.PI * 2 / COLS;          // bir dilimin açısı
+const R_IN = 1.42, R_OUT = 2.42;           // silindir iç/dış yarıçap
+const R_MID = (R_IN + R_OUT) / 2, THICK = (R_OUT - R_IN) / 2;
+const CELL_H = 1;
+const GRAVITY_MS = 800, SOFT_MS = 45, LOCK_MS = 320, CLEAR_MS = 380, FALL_MS = 420;
+
+const PIECES = {
+  I: { color: "#7fd8f0", cells: [[-1,0],[0,0],[1,0],[2,0]] },
+  O: { color: "#ffd66b", cells: [[0,0],[1,0],[0,1],[1,1]] },
+  T: { color: "#c9a0f5", cells: [[-1,0],[0,0],[1,0],[0,1]] },
+  S: { color: "#8fe08f", cells: [[-1,0],[0,0],[0,1],[1,1]] },
+  Z: { color: "#f58c9d", cells: [[0,0],[1,0],[-1,1],[0,1]] },
+  L: { color: "#ffb26b", cells: [[-1,0],[0,0],[1,0],[1,1]] },
+  J: { color: "#86a8f0", cells: [[-1,0],[0,0],[1,0],[-1,1]] },
+};
+
+/* ================= Yardımcılar ================= */
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+const mod = (n,m) => ((n % m) + m) % m;
+
+function hexToRgb(hex){
+  return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
+}
+function shade(hex, k){ // k>1 açar, k<1 koyulaştırır
+  const [r,g,b] = hexToRgb(hex);
+  const f = c => clamp(Math.round(k >= 1 ? c + (255-c)*(k-1) : c*k), 0, 255);
+  return `rgb(${f(r)},${f(g)},${f(b)})`;
+}
+function easeOutBounce(x){
+  const n1 = 7.5625, d1 = 2.75;
+  if (x < 1/d1) return n1*x*x;
+  if (x < 2/d1) return n1*(x -= 1.5/d1)*x + .75;
+  if (x < 2.5/d1) return n1*(x -= 2.25/d1)*x + .9375;
+  return n1*(x -= 2.625/d1)*x + .984375;
+}
+// jelibon salınımı: sönümlü kosinüs (t saniye)
+function jelly(t, freq = 17, damp = 5.5){
+  return t < 0 ? 0 : Math.exp(-damp*t) * Math.cos(freq*t);
+}
+
+/* ================= Ses (Web Audio, dosyasız sentez) ================= */
+const Sfx = (() => {
+  let ctx = null, master = null, noiseBuf = null, muted = false;
+
+  function ensure(){
+    if (!ctx){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = 0.45;
+      master.connect(ctx.destination);
+      noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1;
+    }
+    if (ctx.state === "suspended") ctx.resume();
+    return true;
+  }
+
+  // temel kalıp: osilatör + kazanç zarfı (+ isteğe bağlı vibrato → jelibon titremesi)
+  function tone({type="sine", f0=200, f1=f0, dur=0.2, vol=0.25, delay=0, vib=0, vibF=15}){
+    if (muted || !ensure()) return;
+    const t0 = ctx.currentTime + delay;
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(Math.max(f0,1), t0);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(f1,1), t0 + dur);
+    if (vib > 0){
+      const lfo = ctx.createOscillator(), lg = ctx.createGain();
+      lfo.frequency.value = vibF; lg.gain.value = vib;
+      lfo.connect(lg); lg.connect(osc.frequency);
+      lfo.start(t0); lfo.stop(t0 + dur);
+    }
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g); g.connect(master);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  }
+
+  function noise({dur=0.15, f0=600, f1=f0, q=1.2, vol=0.2, delay=0, type="bandpass"}){
+    if (muted || !ensure()) return;
+    const t0 = ctx.currentTime + delay;
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf;
+    const flt = ctx.createBiquadFilter(); flt.type = type; flt.Q.value = q;
+    flt.frequency.setValueAtTime(f0, t0);
+    flt.frequency.exponentialRampToValueAtTime(Math.max(f1,1), t0 + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(flt); flt.connect(g); g.connect(master);
+    src.start(t0); src.stop(t0 + dur + 0.02);
+  }
+
+  return {
+    unlock(){ ensure(); },
+    setMuted(m){ muted = m; },
+    // kule dönüşü: yumuşak whoosh
+    whoosh(){ noise({dur: 0.11, f0: 500, f1: 1100, vol: 0.10}); },
+    // parça döndürme: minik squish
+    squish(){ tone({f0: 340, f1: 150, dur: 0.09, vol: 0.16, vib: 14, vibF: 30}); },
+    // kilitlenme: tok jelibon boing'i + yumuşak pat
+    boing(strength = 1){
+      tone({f0: 230*strength + 60, f1: 95, dur: 0.30, vol: 0.24*strength, vib: 26, vibF: 17});
+      noise({dur: 0.06, f0: 300, f1: 160, vol: 0.12*strength, type: "lowpass"});
+    },
+    // hafif sekme (halka düşüşü sonu)
+    smallBoing(){ tone({f0: 300, f1: 140, dur: 0.16, vol: 0.12, vib: 18, vibF: 20}); },
+    // hard drop düşüş vızzı
+    zip(){ tone({type: "sawtooth", f0: 190, f1: 720, dur: 0.07, vol: 0.07}); },
+    // halka temizleme: jöle pop'u + neşeli glissando
+    ring(count = 1){
+      noise({dur: 0.10, f0: 700, f1: 1600, vol: 0.16});
+      for (let i = 0; i < count; i++){
+        tone({type: "triangle", f0: 480 + i*120, f1: 980 + i*180, dur: 0.28, vol: 0.16, delay: i*0.07, vib: 10, vibF: 12});
+      }
+      tone({f0: 520, f1: 1150, dur: 0.32, vol: 0.10, delay: 0.03});
+    },
+    // game over: üzgün wobble
+    over(){
+      tone({f0: 330, f1: 70, dur: 1.1, vol: 0.22, vib: 22, vibF: 7});
+      noise({dur: 0.5, f0: 400, f1: 90, vol: 0.07, type: "lowpass"});
+    },
+  };
+})();
+
+/* ================= Oyun durumu ================= */
+let grid;               // grid[row][col] = null | hücre nesnesi
+let piece = null;       // { key, color, cells, col, row, visRow }
+let bag = [];
+let state = "start";    // start | playing | paused | gameover
+let score = 0, rings = 0;
+let gravAcc = 0, softDrop = false, lockT = 0, lockResets = 0;
+let clearing = null;    // { rows:[...], t0 }
+let towerAngle = Math.PI/2 - 0.5*DELTA, towerVel = 0, towerTarget = towerAngle;
+let gameOverT = 0;
+let lastTime = 0;
+
+function newCell(color){
+  return { color, sqA: 0, sqT: -9, fallFrom: 0, fallT: -9, clearP: 0 };
+}
+function emptyGrid(){
+  return Array.from({length: GRID_H}, () => Array(COLS).fill(null));
+}
+function nextFromBag(){
+  if (bag.length === 0){
+    bag = Object.keys(PIECES);
+    for (let i = bag.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
+    }
+  }
+  return bag.pop();
+}
+
+function frontColCont(){ // kameraya bakan sürekli (mod'suz) sütun indeksi
+  return Math.round((Math.PI/2 - towerAngle)/DELTA - 0.5);
+}
+
+function collides(cells, col, row){
+  for (const [dc, dr] of cells){
+    const r = row + dr;
+    if (r < 0) return true;
+    if (r >= GRID_H) continue;
+    if (grid[r][mod(col + dc, COLS)]) return true;
+  }
+  return false;
+}
+
+function spawnPiece(){
+  const key = nextFromBag();
+  const p = PIECES[key];
+  const col = frontColCont();
+  const pc = { key, color: p.color, cells: p.cells.map(c => c.slice()), col, row: ROWS, visRow: ROWS + 1.5 };
+  if (collides(pc.cells, pc.col, pc.row)) { gameOver(); return; }
+  piece = pc;
+  gravAcc = 0; lockT = 0; lockResets = 0;
+  towerTarget = Math.PI/2 - (pc.col + 0.5)*DELTA;
+}
+
+function dropRow(){ // gölge (hayalet) satırı
+  let r = piece.row;
+  while (!collides(piece.cells, piece.col, r - 1)) r--;
+  return r;
+}
+
+function tryMove(dir){
+  if (!piece) return;
+  if (!collides(piece.cells, piece.col + dir, piece.row)){
+    piece.col += dir;
+    towerTarget = Math.PI/2 - (piece.col + 0.5)*DELTA;
+    Sfx.whoosh();
+    if (collides(piece.cells, piece.col, piece.row - 1) && lockResets < 2){ lockT = 0; lockResets++; }
+  }
+}
+
+function tryRotate(){
+  if (!piece) return;
+  const rot = piece.cells.map(([dc, dr]) => [dr, -dc]);
+  for (const kick of [0, 1, 2]){ // yerinde, 1 yukarı, 2 yukarı (I için)
+    if (!collides(rot, piece.col, piece.row + kick)){
+      piece.cells = rot; piece.row += kick;
+      Sfx.squish();
+      if (collides(piece.cells, piece.col, piece.row - 1) && lockResets < 2){ lockT = 0; lockResets++; }
+      return;
+    }
+  }
+}
+
+function hardDrop(){
+  if (!piece) return;
+  const target = dropRow();
+  score += (piece.row - target) * 2;
+  piece.row = target;
+  Sfx.zip();
+  lockPiece(1.25);
+}
+
+function lockPiece(strength = 1){
+  const now = performance.now()/1000;
+  let overflow = false;
+  const cols = new Set();
+  for (const [dc, dr] of piece.cells){
+    const r = piece.row + dr, c = mod(piece.col + dc, COLS);
+    if (r >= ROWS) overflow = true;
+    if (r >= 0 && r < GRID_H){
+      const cell = newCell(piece.color);
+      cell.sqA = 1; cell.sqT = now;
+      grid[r][c] = cell;
+      cols.add(c);
+    }
+  }
+  // jöle titremesi: altta kalan komşulara zayıflayarak yayılır
+  for (const c of cols){
+    let amp = 0.45;
+    for (let r = piece.row - 1; r >= 0 && amp > 0.1; r--){
+      const cell = grid[r][c];
+      if (cell){ cell.sqA = Math.max(cell.sqA, amp); cell.sqT = now + 0.04; amp *= 0.55; }
+    }
+  }
+  Sfx.boing(strength);
+  piece = null;
+  if (overflow){ gameOver(); return; }
+
+  const full = [];
+  for (let r = 0; r < GRID_H; r++){
+    if (grid[r].every(c => c)) full.push(r);
+  }
+  if (full.length){
+    clearing = { rows: full, t0: now };
+    rings += full.length;
+    score += [0, 100, 300, 500, 800][Math.min(full.length, 4)];
+    Sfx.ring(full.length);
+  } else {
+    spawnPiece();
+  }
+}
+
+function finishClear(){
+  const now = performance.now()/1000;
+  const rows = clearing.rows;
+  clearing = null;
+  const removed = new Set(rows);
+  const newGrid = emptyGrid();
+  let w = 0;
+  for (let r = 0; r < GRID_H; r++){
+    if (removed.has(r)) continue;
+    const dropped = r - w;
+    for (let c = 0; c < COLS; c++){
+      const cell = grid[r][c];
+      if (cell && dropped > 0){ cell.fallFrom = dropped; cell.fallT = now; }
+      newGrid[w][c] = cell;
+    }
+    w++;
+  }
+  grid = newGrid;
+  setTimeout(() => { if (state === "playing") Sfx.smallBoing(); }, FALL_MS * 0.6);
+  spawnPiece();
+}
+
+function gameOver(){
+  state = "gameover";
+  piece = null;
+  gameOverT = performance.now()/1000;
+  Sfx.over();
+  showOverlay("CUBIQ", "Oyun bitti! Kule doldu.<br>Tekrar denemek ister misin?", "Yeniden Başla");
+}
+
+function restart(){
+  grid = emptyGrid();
+  bag = []; score = 0; rings = 0;
+  clearing = null; softDrop = false;
+  state = "playing";
+  hideOverlay();
+  spawnPiece();
+}
+
+/* ================= Overlay / UI ================= */
+const overlay = document.getElementById("overlay");
+const ovMsg = document.getElementById("ovMsg");
+const ovBtn = document.getElementById("ovBtn");
+function showOverlay(title, msg, btn){
+  overlay.querySelector("h1").textContent = title;
+  ovMsg.innerHTML = msg;
+  ovBtn.textContent = btn;
+  overlay.classList.remove("hidden");
+}
+function hideOverlay(){ overlay.classList.add("hidden"); }
+ovBtn.addEventListener("click", () => {
+  Sfx.unlock();
+  if (state === "paused"){ state = "playing"; hideOverlay(); }
+  else restart();
+});
+
+function togglePause(){
+  if (state === "playing"){
+    state = "paused";
+    showOverlay("CUBIQ", "Duraklatıldı", "Devam Et");
+  } else if (state === "paused"){
+    state = "playing"; hideOverlay();
+  }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && state === "playing") togglePause();
+});
+
+const muteBtn = document.getElementById("mute");
+let muted = false;
+muteBtn.addEventListener("click", () => {
+  muted = !muted;
+  Sfx.setMuted(muted);
+  muteBtn.textContent = muted ? "🔇" : "🔊";
+  if (!muted) Sfx.unlock();
+});
+
+/* ================= Girdi: klavye (kendi DAS tekrarı ile) ================= */
+const held = {}; // key -> { t: basılı kalma süresi, fired: ilk tekrar oldu mu }
+const DAS_MS = 170, ARR_MS = 60;
+
+document.addEventListener("keydown", e => {
+  const k = e.key;
+  if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"," "].includes(k)) e.preventDefault();
+  if (e.repeat) return;
+  Sfx.unlock();
+  if (k === "p" || k === "P"){ togglePause(); return; }
+  if (k === "r" || k === "R"){ if (state !== "start") restart(); return; }
+  if (state !== "playing") return;
+  if (k === "ArrowLeft"){ tryMove(-1); held[k] = { t: 0, fired: false }; }
+  else if (k === "ArrowRight"){ tryMove(1); held[k] = { t: 0, fired: false }; }
+  else if (k === "ArrowUp"){ tryRotate(); }
+  else if (k === "ArrowDown"){ softDrop = true; }
+  else if (k === " "){ hardDrop(); }
+});
+document.addEventListener("keyup", e => {
+  delete held[e.key];
+  if (e.key === "ArrowDown") softDrop = false;
+});
+
+function processDAS(dtMs){
+  if (state !== "playing") return;
+  for (const k of Object.keys(held)){
+    const h = held[k];
+    h.t += dtMs;
+    const dir = k === "ArrowLeft" ? -1 : 1;
+    if (!h.fired){
+      if (h.t >= DAS_MS){ tryMove(dir); h.fired = true; h.t = 0; }
+    } else if (h.t >= ARR_MS){ tryMove(dir); h.t = 0; }
+  }
+}
+
+/* ================= Girdi: dokunmatik ================= */
+const canvas = document.getElementById("game");
+let touch = null;
+canvas.addEventListener("pointerdown", e => {
+  Sfx.unlock();
+  if (state !== "playing") return;
+  touch = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now(), acted: false };
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener("pointermove", e => {
+  if (!touch || state !== "playing") return;
+  const stepPx = Math.max(36, window.innerWidth * 0.07);
+  let dx = e.clientX - touch.x;
+  while (dx <= -stepPx){ tryMove(-1); touch.x -= stepPx; dx += stepPx; touch.acted = true; }
+  while (dx >= stepPx){ tryMove(1); touch.x += stepPx; dx -= stepPx; touch.acted = true; }
+});
+canvas.addEventListener("pointerup", e => {
+  if (!touch) return;
+  const dt = performance.now() - touch.t;
+  const dxT = e.clientX - touch.sx, dyT = e.clientY - touch.sy;
+  if (state === "playing" && !touch.acted){
+    if (dyT > 70 && dt < 350 && Math.abs(dxT) < Math.abs(dyT)) hardDrop();       // hızlı aşağı kaydırma
+    else if (dt < 260 && Math.abs(dxT) < 12 && Math.abs(dyT) < 12) tryRotate();  // dokunma
+  }
+  touch = null;
+});
+canvas.addEventListener("pointercancel", () => { touch = null; });
+
+// alt buton şeridi
+function bindHold(id, onPress, onRelease, repeat){
+  const el = document.getElementById(id);
+  let timer = null, rep = null;
+  const down = e => {
+    e.preventDefault(); Sfx.unlock();
+    if (state !== "playing") return;
+    onPress();
+    if (repeat){
+      timer = setTimeout(() => { rep = setInterval(onPress, ARR_MS); }, DAS_MS);
+    }
+  };
+  const up = e => {
+    e.preventDefault();
+    clearTimeout(timer); clearInterval(rep); timer = rep = null;
+    if (onRelease) onRelease();
+  };
+  el.addEventListener("pointerdown", down);
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointercancel", up);
+  el.addEventListener("pointerleave", up);
+}
+bindHold("tbL", () => tryMove(-1), null, true);
+bindHold("tbR", () => tryMove(1), null, true);
+bindHold("tbRot", () => tryRotate(), null, false);
+bindHold("tbSoft", () => { softDrop = true; }, () => { softDrop = false; }, false);
+bindHold("tbHard", () => hardDrop(), null, false);
+
+/* ================= 3D projeksiyon (el yapımı) ================= */
+const ctx2d = canvas.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+const TILT = 0.42, CAM_DIST = 15, LOOK_Y = ROWS * 0.42;
+const cosT = Math.cos(TILT), sinT = Math.sin(TILT);
+let SCALE = 100, OFFX = 0, OFFY = 0;
+
+function projRaw(x, y, z){ // fov=1 ham projeksiyon
+  const py = y - LOOK_Y;
+  const y2 = py*cosT - z*sinT;
+  const z2 = py*sinT + z*cosT + CAM_DIST;
+  return [x / z2, -y2 / z2, z2];
+}
+function proj(x, y, z){
+  const [px, py, d] = projRaw(x, y, z);
+  return [OFFX + px*SCALE, OFFY + py*SCALE, d];
+}
+function camSpace(x, y, z){ // kamera uzayı noktası (kamera orijinde)
+  const py = y - LOOK_Y;
+  return [x, py*cosT - z*sinT, py*sinT + z*cosT + CAM_DIST];
+}
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W*DPR; canvas.height = H*DPR;
+  ctx2d.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // sığdırma: sınır silindirinin uç noktalarını örnekleyip bbox'a göre ölçekle
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  const rr = R_OUT + 0.6;
+  for (let a = 0; a < 24; a++){
+    const th = a/24 * Math.PI*2;
+    for (const y of [-1.7, ROWS + 2.6]){
+      const [px, py] = projRaw(rr*Math.cos(th), y, rr*Math.sin(th));
+      minX = Math.min(minX, px); maxX = Math.max(maxX, px);
+      minY = Math.min(minY, py); maxY = Math.max(maxY, py);
+    }
+  }
+  SCALE = Math.min(W*0.95/(maxX-minX), H*0.94/(maxY-minY));
+  OFFX = W/2 - SCALE*(minX+maxX)/2;
+  OFFY = H/2 - SCALE*(minY+maxY)/2;
+}
+window.addEventListener("resize", resize);
+resize();
+
+/* ================= Çizim ================= */
+function roundedPoly(pts, r){
+  ctx2d.beginPath();
+  const n = pts.length;
+  for (let i = 0; i < n; i++){
+    const p0 = pts[i], p1 = pts[(i+1)%n], p2 = pts[(i+2)%n];
+    const v1x = p1[0]-p0[0], v1y = p1[1]-p0[1];
+    const v2x = p2[0]-p1[0], v2y = p2[1]-p1[1];
+    const l1 = Math.hypot(v1x,v1y) || 1, l2 = Math.hypot(v2x,v2y) || 1;
+    const rr = Math.min(r, l1*0.35, l2*0.35);
+    const a = [p1[0]-v1x/l1*rr, p1[1]-v1y/l1*rr];
+    const b = [p1[0]+v2x/l2*rr, p1[1]+v2y/l2*rr];
+    if (i === 0) ctx2d.moveTo(a[0], a[1]); else ctx2d.lineTo(a[0], a[1]);
+    ctx2d.quadraticCurveTo(p1[0], p1[1], b[0], b[1]);
+  }
+  ctx2d.closePath();
+}
+
+// hücre köşeleri: silindir yüzeyinde, squash/stretch ve düşüş ofseti uygulanmış 8 nokta
+function cellVerts(colCont, row, { sy = 1, sxz = 1, yOff = 0 } = {}){
+  const aC = (colCont + 0.5)*DELTA + towerAngle;
+  const aH = DELTA/2 * sxz;
+  const tH = THICK * sxz;
+  const yB = (row + yOff) * CELL_H;
+  const verts = [];
+  for (const dy of [0, 1]){
+    const y = yB + dy*CELL_H*sy;
+    for (const dr of [-1, 1]){
+      const R = R_MID + dr*tH;
+      for (const da of [-1, 1]){
+        const th = aC + da*aH;
+        verts.push([R*Math.cos(th), y, R*Math.sin(th)]);
+      }
+    }
+  }
+  // indeks: dy*4 + dr*2 + da → 0:(alt,iç,-a) 1:(alt,iç,+a) 2:(alt,dış,-a) 3:(alt,dış,+a) 4..7 üst
+  return verts;
+}
+
+// yüzler (dışa bakan normal ile CCW sarım)
+const FACES = [
+  { idx: [2,3,7,6], gloss: true  }, // dış
+  { idx: [1,0,4,5], gloss: false }, // iç
+  { idx: [6,7,5,4], gloss: true  }, // üst
+  { idx: [0,1,3,2], gloss: false }, // alt
+  { idx: [0,2,6,4], gloss: false }, // yan (-a)
+  { idx: [3,1,5,7], gloss: false }, // yan (+a)
+];
+
+const LIGHT = (() => { const l = [-0.45, 0.75, -0.5]; const n = Math.hypot(...l); return l.map(v => v/n); })();
+
+function drawCube(verts, color, { alpha = 1, bright = 1, outline = true } = {}){
+  const cam = verts.map(v => camSpace(v[0], v[1], v[2]));
+  const scr = cam.map(c => [OFFX + c[0]/c[2]*SCALE, OFFY - c[1]/c[2]*SCALE]);
+  ctx2d.globalAlpha = alpha;
+  for (const face of FACES){
+    const [i0, i1, i2, i3] = face.idx;
+    const e1 = [cam[i1][0]-cam[i0][0], cam[i1][1]-cam[i0][1], cam[i1][2]-cam[i0][2]];
+    const e2 = [cam[i3][0]-cam[i0][0], cam[i3][1]-cam[i0][1], cam[i3][2]-cam[i0][2]];
+    const n = [e1[1]*e2[2]-e1[2]*e2[1], e1[2]*e2[0]-e1[0]*e2[2], e1[0]*e2[1]-e1[1]*e2[0]];
+    const cx = (cam[i0][0]+cam[i1][0]+cam[i2][0]+cam[i3][0])/4;
+    const cy = (cam[i0][1]+cam[i1][1]+cam[i2][1]+cam[i3][1])/4;
+    const cz = (cam[i0][2]+cam[i1][2]+cam[i2][2]+cam[i3][2])/4;
+    if (n[0]*cx + n[1]*cy + n[2]*cz >= 0) continue; // arkaya bakan yüz
+    const nl = Math.hypot(n[0], n[1], n[2]) || 1;
+    const diff = Math.max(0, (n[0]*LIGHT[0] + n[1]*LIGHT[1] + n[2]*LIGHT[2])/nl);
+    const b = (0.84 + 0.42*diff) * bright;
+    const pts = [scr[i0], scr[i1], scr[i2], scr[i3]];
+    const rPix = Math.min(9, SCALE*0.05);
+    roundedPoly(pts, rPix);
+    ctx2d.fillStyle = shade(color, b);
+    ctx2d.fill();
+    if (outline){
+      ctx2d.strokeStyle = shade(color, 0.55);
+      ctx2d.lineWidth = Math.max(1.2, SCALE*0.012);
+      ctx2d.lineJoin = "round";
+      ctx2d.stroke();
+    }
+    if (face.gloss && alpha > 0.5){ // jelibon parlaması
+      let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+      for (const p of pts){
+        minx = Math.min(minx, p[0]); maxx = Math.max(maxx, p[0]);
+        miny = Math.min(miny, p[1]); maxy = Math.max(maxy, p[1]);
+      }
+      const gx = minx + (maxx-minx)*0.32, gy = miny + (maxy-miny)*0.28;
+      const gr = ctx2d.createRadialGradient(gx, gy, 0, gx, gy, (maxx-minx)*0.55);
+      gr.addColorStop(0, "rgba(255,255,255,0.42)");
+      gr.addColorStop(1, "rgba(255,255,255,0)");
+      ctx2d.save();
+      roundedPoly(pts, rPix);
+      ctx2d.clip();
+      ctx2d.fillStyle = gr;
+      ctx2d.fillRect(minx, miny, maxx-minx, maxy-miny);
+      ctx2d.restore();
+    }
+  }
+  ctx2d.globalAlpha = 1;
+}
+
+function drawPedestal(){
+  const ellipse = (R, y) => {
+    ctx2d.beginPath();
+    for (let i = 0; i <= 40; i++){
+      const th = i/40 * Math.PI*2;
+      const [px, py] = proj(R*Math.cos(th), y, R*Math.sin(th));
+      if (i === 0) ctx2d.moveTo(px, py); else ctx2d.lineTo(px, py);
+    }
+    ctx2d.closePath();
+  };
+  const RD = R_OUT * 1.38, RB = R_OUT * 1.48;
+  const yTop = -0.1, yBot = -1.05;
+
+  // zemin gölgesi
+  const [gx, gy] = proj(0, yBot, 0);
+  ctx2d.save();
+  const sh = ctx2d.createRadialGradient(gx, gy, 0, gx, gy, RB*1.45*SCALE/CAM_DIST);
+  sh.addColorStop(0, "rgba(0,0,0,0.20)");
+  sh.addColorStop(1, "rgba(0,0,0,0)");
+  ctx2d.fillStyle = sh;
+  ellipse(RB*1.5, yBot - 0.02);
+  ctx2d.fill();
+  ctx2d.restore();
+
+  // gövde bandı (ön yarım): üst çemberin ön yayı + alt çemberin ters ön yayı
+  ctx2d.beginPath();
+  for (let i = 0; i <= 24; i++){
+    const th = i/24 * Math.PI; // ön yarı: 0..π (z>0 tarafı)
+    const [px, py] = proj(RD*Math.cos(th), yTop, RD*Math.sin(th));
+    if (i === 0) ctx2d.moveTo(px, py); else ctx2d.lineTo(px, py);
+  }
+  for (let i = 24; i >= 0; i--){
+    const th = i/24 * Math.PI;
+    const [px, py] = proj(RB*Math.cos(th), yBot, RB*Math.sin(th));
+    ctx2d.lineTo(px, py);
+  }
+  ctx2d.closePath();
+  const [, bandTopY] = proj(0, yTop, RD), [, bandBotY] = proj(0, yBot, RB);
+  const bandGrad = ctx2d.createLinearGradient(0, bandTopY, 0, bandBotY);
+  bandGrad.addColorStop(0, "#c8c8cd");
+  bandGrad.addColorStop(0.45, "#f2f2f5");
+  bandGrad.addColorStop(1, "#9d9da4");
+  ctx2d.fillStyle = bandGrad;
+  ctx2d.fill();
+
+  // tabak üstü
+  ellipse(RD, yTop);
+  const [tx, ty] = proj(0, yTop, 0);
+  const topGrad = ctx2d.createRadialGradient(tx, ty - SCALE*0.05, 0, tx, ty, RD*1.15*SCALE/CAM_DIST);
+  topGrad.addColorStop(0, "#ffffff");
+  topGrad.addColorStop(0.7, "#e4e4e8");
+  topGrad.addColorStop(1, "#b9b9c0");
+  ctx2d.fillStyle = topGrad;
+  ctx2d.fill();
+
+  // iç çukur (kulenin oturduğu yer)
+  ellipse(R_OUT*1.06, yTop + 0.02);
+  ctx2d.fillStyle = "rgba(160,160,168,0.5)";
+  ctx2d.fill();
+
+  // ön bantta CUBIQ yazısı
+  const [lx, ly] = proj(0, (yTop+yBot)/2 - 0.06, (RD+RB)/2);
+  const fs = SCALE * 0.055;
+  ctx2d.font = `bold ${fs}px "Trebuchet MS", sans-serif`;
+  ctx2d.textAlign = "center";
+  ctx2d.textBaseline = "middle";
+  const tg = ctx2d.createLinearGradient(0, ly - fs/2, 0, ly + fs/2);
+  tg.addColorStop(0, "#8e8e96");
+  tg.addColorStop(0.5, "#fdfdff");
+  tg.addColorStop(1, "#7b7b83");
+  ctx2d.save();
+  ctx2d.shadowColor = "rgba(0,0,0,0.25)";
+  ctx2d.shadowBlur = 2;
+  ctx2d.shadowOffsetY = 1;
+  ctx2d.fillStyle = tg;
+  ctx2d.letterSpacing = `${fs*0.22}px`;
+  ctx2d.fillText("CUBIQ", lx, ly);
+  ctx2d.restore();
+}
+
+function render(now){
+  ctx2d.clearRect(0, 0, W, H);
+  drawPedestal();
+
+  const list = []; // { depth, draw() }
+  const pushCube = (colCont, row, color, opts, xform) => {
+    const verts = cellVerts(colCont, row, xform);
+    let d = 0;
+    for (const v of verts) d += camSpace(v[0], v[1], v[2])[2];
+    list.push({ depth: d/8, draw: () => drawCube(verts, color, opts) });
+  };
+
+  const gray = state === "gameover" ? clamp((now - gameOverT)*1.6, 0, 1) : 0;
+
+  // kilitli hücreler
+  for (let r = 0; r < GRID_H; r++){
+    for (let c = 0; c < COLS; c++){
+      const cell = grid[r][c];
+      if (!cell) continue;
+      const s = cell.sqA * jelly(now - cell.sqT);
+      let sy = 1 - 0.26*s, sxz = 1 + 0.18*s;
+      let yOff = 0, alpha = 1, bright = 1;
+      if (cell.fallFrom > 0){
+        const p = clamp((now - cell.fallT)/(FALL_MS/1000), 0, 1);
+        yOff = cell.fallFrom * (1 - easeOutBounce(p));
+        if (p >= 1) cell.fallFrom = 0;
+      }
+      if (clearing && clearing.rows.includes(r)){
+        const p = clamp((now - clearing.t0)/(CLEAR_MS/1000), 0, 1);
+        sy *= 1 + 0.55*p; sxz *= 1 + 0.55*p;
+        alpha = 1 - p;
+        bright = 1 + 0.8*p;
+      }
+      let color = cell.color;
+      if (gray > 0){
+        const [rr, gg, bb] = hexToRgb(color);
+        const l = 0.3*rr + 0.6*gg + 0.1*bb;
+        color = `#${[rr + (l-rr)*gray, gg + (l-gg)*gray, bb + (l-bb)*gray]
+          .map(v => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
+      }
+      pushCube(c, r, color, { alpha, bright: bright * (1 - 0.25*gray) }, { sy, sxz, yOff });
+    }
+  }
+
+  if (piece && state === "playing"){
+    // gölge (hayalet)
+    const gRow = dropRow();
+    if (gRow < piece.visRow - 0.4){
+      for (const [dc, dr] of piece.cells){
+        pushCube(piece.col + dc, gRow + dr, piece.color, { alpha: 0.20, outline: false }, {});
+      }
+    }
+    // düşen parça: hıza göre jelibon stretch'i
+    const vel = piece.visRow - piece.row;
+    const sy = 1 + clamp(vel*0.22, 0, 0.28);
+    const sxz = 1 - clamp(vel*0.10, 0, 0.13);
+    for (const [dc, dr] of piece.cells){
+      const verts = cellVerts(piece.col + dc, piece.visRow + dr, { sy, sxz });
+      let d = 0;
+      for (const v of verts) d += camSpace(v[0], v[1], v[2])[2];
+      list.push({ depth: d/8, draw: () => drawCube(verts, piece.color, { bright: 1.12 }) });
+    }
+  }
+
+  list.sort((a, b) => b.depth - a.depth); // uzaktan yakına (painter's algorithm)
+  for (const item of list) item.draw();
+}
+
+/* ================= Ana döngü ================= */
+function update(dt, now){
+  // kule dönüşü: yaylı (overshoot'lu) yerleşme
+  towerVel += (towerTarget - towerAngle) * 110 * dt;
+  towerVel *= Math.exp(-9.5*dt);
+  towerAngle += towerVel * dt;
+
+  if (state !== "playing") return;
+  processDAS(dt*1000);
+
+  if (clearing){
+    if (now - clearing.t0 >= CLEAR_MS/1000) finishClear();
+    return;
+  }
+  if (!piece) return;
+
+  piece.visRow += (piece.row - piece.visRow) * Math.min(1, dt*16);
+
+  if (collides(piece.cells, piece.col, piece.row - 1)){
+    lockT += dt*1000;
+    if (lockT >= LOCK_MS) lockPiece();
+  } else {
+    lockT = 0;
+    gravAcc += dt*1000;
+    const interval = softDrop ? SOFT_MS : GRAVITY_MS;
+    while (gravAcc >= interval){
+      gravAcc -= interval;
+      if (!collides(piece.cells, piece.col, piece.row - 1)){
+        piece.row--;
+        if (softDrop) score++;
+      } else break;
+    }
+  }
+}
+
+function frame(t){
+  const now = t/1000;
+  const dt = Math.min(0.05, now - (lastTime || now));
+  lastTime = now;
+  update(dt, now);
+  render(now);
+  requestAnimationFrame(frame);
+}
+
+grid = emptyGrid();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
