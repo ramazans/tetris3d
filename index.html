@@ -84,6 +84,11 @@
     <input id="dist" type="range" min="12" max="80" step="1" value="30">
     <span class="val" id="distVal">30</span>
   </div>
+  <div class="row" title="Kamera yüksekliği (z ekseni)">
+    <span>↕️</span>
+    <input id="camy" type="range" min="-6" max="18" step="1" value="5">
+    <span class="val" id="camyVal">5</span>
+  </div>
 </div>
 
 <div id="overlay">
@@ -502,13 +507,13 @@ bindHold("tbHard", () => hardDrop(), null, false);
 /* ================= 3D projeksiyon (el yapımı) ================= */
 const ctx2d = canvas.getContext("2d");
 let W = 0, H = 0, DPR = 1;
-const LOOK_Y = ROWS * 0.45;
+let CAM_Y = 5;                    // kamera yüksekliği (z ekseni) — ekrandaki ↕️ kayar ayarıyla değişir
 let CAM_DIST = 30;                // kamera uzaklığı — ekrandaki 📏 kayar ayarıyla değişir
 let TILT = 0, cosT = 1, sinT = 0; // bakış açısı — ekrandaki 🎥 kayar ayarıyla değişir
 let SCALE = 100, OFFX = 0, OFFY = 0;
 
 function projRaw(x, y, z){ // fov=1 ham projeksiyon
-  const py = y - LOOK_Y;
+  const py = y - CAM_Y;
   const y2 = py*cosT - z*sinT;
   const z2 = py*sinT + z*cosT + CAM_DIST;
   return [x / z2, -y2 / z2, z2];
@@ -518,7 +523,7 @@ function proj(x, y, z){
   return [OFFX + px*SCALE, OFFY + py*SCALE, d];
 }
 function camSpace(x, y, z){ // kamera uzayı noktası (kamera orijinde)
-  const py = y - LOOK_Y;
+  const py = y - CAM_Y;
   return [x, py*cosT - z*sinT, py*sinT + z*cosT + CAM_DIST];
 }
 
@@ -563,6 +568,11 @@ function setDist(d){
   document.getElementById("distVal").textContent = `${Math.round(d)}`;
   computeFit();
 }
+function setCamY(v){
+  CAM_Y = v;
+  document.getElementById("camyVal").textContent = `${Math.round(v)}`;
+  computeFit();
+}
 // kayar ayar kalıbı: localStorage'dan yükle, girişte uygula ve sakla
 function bindSlider(id, storeKey, apply, def){
   const el = document.getElementById(id);
@@ -578,6 +588,7 @@ function bindSlider(id, storeKey, apply, def){
 resize();
 bindSlider("tilt", "cubiq-tilt", setTilt, 15);
 bindSlider("dist", "cubiq-dist", setDist, 30);
+bindSlider("camy", "cubiq-camy", setCamY, 5);
 
 /* ================= Çizim ================= */
 function poly(pts){
