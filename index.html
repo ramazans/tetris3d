@@ -24,14 +24,19 @@
   }
   #mute:active { transform: scale(.92); }
 
-  #tiltCtl {
+  #camCtl {
     position: fixed; top: 12px; left: 12px; z-index: 10;
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 12px; border-radius: 22px; font-size: 16px;
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 10px 14px; border-radius: 16px; font-size: 15px;
     background: rgba(255,255,255,.65); box-shadow: 0 2px 8px rgba(0,0,0,.15);
     backdrop-filter: blur(4px);
   }
-  #tilt { width: 110px; accent-color: #888; }
+  #camCtl .row { display: flex; align-items: center; gap: 8px; }
+  #camCtl input { width: 110px; accent-color: #888; }
+  #camCtl .val {
+    min-width: 44px; text-align: right; color: #555;
+    font-variant-numeric: tabular-nums; font-size: 13px;
+  }
 
   #overlay {
     position: fixed; inset: 0; z-index: 20;
@@ -68,9 +73,17 @@
 <body>
 <canvas id="game"></canvas>
 <button id="mute" title="Ses aç/kapat">🔊</button>
-<div id="tiltCtl" title="Bakış açısı">
-  <span>🎥</span>
-  <input id="tilt" type="range" min="5" max="60" step="1" value="15">
+<div id="camCtl">
+  <div class="row" title="Bakış açısı">
+    <span>🎥</span>
+    <input id="tilt" type="range" min="-60" max="60" step="1" value="15">
+    <span class="val" id="tiltVal">15°</span>
+  </div>
+  <div class="row" title="Kamera uzaklığı">
+    <span>📏</span>
+    <input id="dist" type="range" min="12" max="80" step="1" value="30">
+    <span class="val" id="distVal">30</span>
+  </div>
 </div>
 
 <div id="overlay">
@@ -485,7 +498,8 @@ bindHold("tbHard", () => hardDrop(), null, false);
 /* ================= 3D projeksiyon (el yapımı) ================= */
 const ctx2d = canvas.getContext("2d");
 let W = 0, H = 0, DPR = 1;
-const CAM_DIST = 30, LOOK_Y = ROWS * 0.45;
+const LOOK_Y = ROWS * 0.45;
+let CAM_DIST = 30;                // kamera uzaklığı — ekrandaki 📏 kayar ayarıyla değişir
 let TILT = 0, cosT = 1, sinT = 0; // bakış açısı — ekrandaki 🎥 kayar ayarıyla değişir
 let SCALE = 100, OFFX = 0, OFFY = 0;
 
@@ -537,18 +551,29 @@ function setTilt(deg){
   TILT = deg * Math.PI/180;
   cosT = Math.cos(TILT);
   sinT = Math.sin(TILT);
+  document.getElementById("tiltVal").textContent = `${Math.round(deg)}°`;
   computeFit();
 }
-const tiltInput = document.getElementById("tilt");
-let savedTilt = NaN;
-try { savedTilt = parseFloat(localStorage.getItem("cubiq-tilt")); } catch (e) {}
-tiltInput.value = Number.isFinite(savedTilt) ? clamp(savedTilt, 5, 60) : 15;
-tiltInput.addEventListener("input", () => {
-  setTilt(parseFloat(tiltInput.value));
-  try { localStorage.setItem("cubiq-tilt", tiltInput.value); } catch (e) {}
-});
+function setDist(d){
+  CAM_DIST = d;
+  document.getElementById("distVal").textContent = `${Math.round(d)}`;
+  computeFit();
+}
+// kayar ayar kalıbı: localStorage'dan yükle, girişte uygula ve sakla
+function bindSlider(id, storeKey, apply, def){
+  const el = document.getElementById(id);
+  let saved = NaN;
+  try { saved = parseFloat(localStorage.getItem(storeKey)); } catch (e) {}
+  el.value = Number.isFinite(saved) ? clamp(saved, +el.min, +el.max) : def;
+  el.addEventListener("input", () => {
+    apply(parseFloat(el.value));
+    try { localStorage.setItem(storeKey, el.value); } catch (e) {}
+  });
+  apply(parseFloat(el.value));
+}
 resize();
-setTilt(parseFloat(tiltInput.value));
+bindSlider("tilt", "cubiq-tilt", setTilt, 15);
+bindSlider("dist", "cubiq-dist", setDist, 30);
 
 /* ================= Çizim ================= */
 function poly(pts){
