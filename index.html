@@ -760,8 +760,10 @@ function drawColumnGuides(){
 
 function render(now){
   ctx2d.clearRect(0, 0, W, H);
-  if (showCage) drawCage();
-  if (piece && state === "playing") drawColumnGuides();
+  if (showCage){
+    drawCage();
+    if (piece && state === "playing") drawColumnGuides();
+  }
 
   const list = []; // { depth, draw() }
   const pushCell = (colCont, row, color, opts, yOff = 0) => {
