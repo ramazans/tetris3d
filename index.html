@@ -37,6 +37,11 @@
     min-width: 44px; text-align: right; color: #555;
     font-variant-numeric: tabular-nums; font-size: 13px;
   }
+  #camCtl .cageLbl {
+    display: flex; align-items: center; gap: 6px;
+    color: #555; font-size: 13px; cursor: pointer;
+  }
+  #camCtl .cageLbl input { width: auto; accent-color: #888; }
 
   #overlay {
     position: fixed; inset: 0; z-index: 20;
@@ -88,6 +93,10 @@
     <span>↕️</span>
     <input id="camy" type="range" min="-6" max="18" step="1" value="5">
     <span class="val" id="camyVal">5</span>
+  </div>
+  <div class="row" title="Kılavuz çizgileri">
+    <span>▦</span>
+    <label class="cageLbl"><input id="cage" type="checkbox" checked> Kılavuz</label>
   </div>
 </div>
 
@@ -590,6 +599,15 @@ bindSlider("tilt", "cubiq-tilt", setTilt, 15);
 bindSlider("dist", "cubiq-dist", setDist, 30);
 bindSlider("camy", "cubiq-camy", setCamY, 5);
 
+let showGuide = true;
+const cageInput = document.getElementById("cage");
+try { showGuide = localStorage.getItem("cubiq-guide") !== "0"; } catch (e) {}
+cageInput.checked = showGuide;
+cageInput.addEventListener("change", () => {
+  showGuide = cageInput.checked;
+  try { localStorage.setItem("cubiq-guide", showGuide ? "1" : "0"); } catch (e) {}
+});
+
 /* ================= Çizim ================= */
 function poly(pts){
   ctx2d.beginPath();
@@ -739,7 +757,7 @@ function drawBaseGuide(){
 
 function render(now){
   ctx2d.clearRect(0, 0, W, H);
-  drawBaseGuide();
+  if (showGuide) drawBaseGuide();
 
   const list = []; // { depth, draw() }
   const pushCell = (colCont, row, color, opts, yOff = 0) => {
