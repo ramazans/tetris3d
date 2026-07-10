@@ -714,7 +714,7 @@ function drawCage(){
   const R = R_OUT + 0.01;
   ctx2d.strokeStyle = "#444";
   ctx2d.lineWidth = 1;
-  ctx2d.globalAlpha = 0.10;
+  ctx2d.globalAlpha = 0.05;
   for (let r = 0; r <= ROWS; r++){
     ctx2d.beginPath();
     for (let i = 0; i <= 60; i++){
@@ -756,10 +756,10 @@ function drawColumnGuides(){
       ctx2d.lineTo(px, py);
     }
     ctx2d.closePath();
-    ctx2d.globalAlpha = 0.12;
+    ctx2d.globalAlpha = 0.06;
     ctx2d.fillStyle = piece.color;
     ctx2d.fill();
-    ctx2d.globalAlpha = 0.30;
+    ctx2d.globalAlpha = 0.15;
     ctx2d.strokeStyle = piece.color;
     ctx2d.lineWidth = 1;
     ctx2d.stroke();
