@@ -219,7 +219,8 @@ let state = "start";    // start | playing | paused | gameover
 let score = 0, rings = 0;
 let gravAcc = 0, softDrop = false, lockT = 0, lockResets = 0;
 let clearing = null;    // { rows:[...], t0 }
-let towerAngle = Math.PI/2 - 0.5*DELTA, towerTarget = towerAngle;
+const FRONT = -Math.PI/2; // kameraya en yakın açı (dünya z ekseninin eksi yönü)
+let towerAngle = FRONT - 0.5*DELTA, towerTarget = towerAngle;
 let gameOverT = 0;
 let lastTime = 0;
 
@@ -241,7 +242,7 @@ function nextFromBag(){
 }
 
 function frontColCont(){ // kameraya bakan sürekli (mod'suz) sütun indeksi
-  return Math.round((Math.PI/2 - towerAngle)/DELTA - 0.5);
+  return Math.round((FRONT - towerAngle)/DELTA - 0.5);
 }
 
 function collides(cells, col, row){
@@ -262,7 +263,7 @@ function spawnPiece(){
   if (collides(pc.cells, pc.col, pc.row)) { gameOver(); return; }
   piece = pc;
   gravAcc = 0; lockT = 0; lockResets = 0;
-  towerTarget = Math.PI/2 - (pc.col + 0.5)*DELTA;
+  towerTarget = FRONT - (pc.col + 0.5)*DELTA;
 }
 
 function dropRow(){ // gölge (hayalet) satırı
@@ -275,7 +276,7 @@ function tryMove(dir){
   if (!piece) return;
   if (!collides(piece.cells, piece.col + dir, piece.row)){
     piece.col += dir;
-    towerTarget = Math.PI/2 - (piece.col + 0.5)*DELTA;
+    towerTarget = FRONT - (piece.col + 0.5)*DELTA;
     Sfx.move();
     if (collides(piece.cells, piece.col, piece.row - 1) && lockResets < 2){ lockT = 0; lockResets++; }
   }
