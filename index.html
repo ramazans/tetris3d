@@ -227,6 +227,7 @@ let bag = [];
 let state = "start";    // start | playing | paused | gameover
 let score = 0, rings = 0;
 let gravAcc = 0, softDrop = false, lockT = 0, lockResets = 0;
+let firstLocked = false; // ilk parça yere inene kadar silindir çevrilemez
 let clearing = null;    // { rows:[...], t0 }
 const FRONT = -Math.PI/2; // kameraya en yakın açı (dünya z ekseninin eksi yönü)
 let towerAngle = FRONT - 0.5*DELTA, towerTarget = towerAngle;
@@ -282,7 +283,7 @@ function dropRow(){ // gölge (hayalet) satırı
 }
 
 function tryMove(dir){
-  if (!piece) return;
+  if (!piece || !firstLocked) return;
   if (!collides(piece.cells, piece.col + dir, piece.row)){
     piece.col += dir;
     towerTarget = FRONT - (piece.col + 0.5)*DELTA;
@@ -322,6 +323,7 @@ function lockPiece(){
     if (r >= 0 && r < GRID_H) grid[r][c] = newCell(piece.color);
   }
   Sfx.lock();
+  firstLocked = true;
   piece = null;
   if (overflow){ gameOver(); return; }
 
@@ -372,6 +374,7 @@ function restart(){
   grid = emptyGrid();
   bag = []; score = 0; rings = 0;
   clearing = null; softDrop = false;
+  firstLocked = false;
   state = "playing";
   hideOverlay();
   spawnPiece();
