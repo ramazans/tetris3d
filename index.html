@@ -24,6 +24,15 @@
   }
   #mute:active { transform: scale(.92); }
 
+  #tiltCtl {
+    position: fixed; top: 12px; left: 12px; z-index: 10;
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-radius: 22px; font-size: 16px;
+    background: rgba(255,255,255,.65); box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    backdrop-filter: blur(4px);
+  }
+  #tilt { width: 110px; accent-color: #888; }
+
   #overlay {
     position: fixed; inset: 0; z-index: 20;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -31,12 +40,6 @@
     text-align: center; padding: 20px;
   }
   #overlay.hidden { display: none; }
-  #overlay h1 {
-    margin: 0 0 8px; font-size: clamp(48px, 12vw, 88px); letter-spacing: .06em;
-    background: linear-gradient(180deg, #d41f2c, #f5d800 50%, #00b7d6);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-    filter: drop-shadow(0 3px 0 rgba(0,0,0,.2));
-  }
   #overlay p { margin: 6px 0 22px; color: #666; font-size: 15px; line-height: 1.6; }
   #overlay button {
     font-size: 22px; font-weight: bold; color: #fff; cursor: pointer;
@@ -65,9 +68,12 @@
 <body>
 <canvas id="game"></canvas>
 <button id="mute" title="Ses aç/kapat">🔊</button>
+<div id="tiltCtl" title="Bakış açısı">
+  <span>🎥</span>
+  <input id="tilt" type="range" min="5" max="60" step="1" value="15">
+</div>
 
 <div id="overlay">
-  <h1>CUBIQ</h1>
   <p id="ovMsg">
     ← → kuleyi döndür &nbsp;•&nbsp; ↑ parçayı çevir<br>
     ↓ hızlı indir &nbsp;•&nbsp; Boşluk: bırak &nbsp;•&nbsp; P: duraklat<br>
@@ -336,7 +342,7 @@ function gameOver(){
   piece = null;
   gameOverT = performance.now()/1000;
   Sfx.over();
-  showOverlay("CUBIQ", "Oyun bitti! Kule doldu.<br>Tekrar denemek ister misin?", "Yeniden Başla");
+  showOverlay("Oyun bitti! Kule doldu.<br>Tekrar denemek ister misin?", "Yeniden Başla");
 }
 
 function restart(){
@@ -352,8 +358,7 @@ function restart(){
 const overlay = document.getElementById("overlay");
 const ovMsg = document.getElementById("ovMsg");
 const ovBtn = document.getElementById("ovBtn");
-function showOverlay(title, msg, btn){
-  overlay.querySelector("h1").textContent = title;
+function showOverlay(msg, btn){
   ovMsg.innerHTML = msg;
   ovBtn.textContent = btn;
   overlay.classList.remove("hidden");
@@ -368,7 +373,7 @@ ovBtn.addEventListener("click", () => {
 function togglePause(){
   if (state === "playing"){
     state = "paused";
-    showOverlay("CUBIQ", "Duraklatıldı", "Devam Et");
+    showOverlay("Duraklatıldı", "Devam Et");
   } else if (state === "paused"){
     state = "playing"; hideOverlay();
   }
@@ -480,8 +485,8 @@ bindHold("tbHard", () => hardDrop(), null, false);
 /* ================= 3D projeksiyon (el yapımı) ================= */
 const ctx2d = canvas.getContext("2d");
 let W = 0, H = 0, DPR = 1;
-const TILT = 0.26, CAM_DIST = 30, LOOK_Y = ROWS * 0.45; // ~15°: yandan, hafif yukarıdan — silindirin tabanı görünmez
-const cosT = Math.cos(TILT), sinT = Math.sin(TILT);
+const CAM_DIST = 30, LOOK_Y = ROWS * 0.45;
+let TILT = 0, cosT = 1, sinT = 0; // bakış açısı — ekrandaki 🎥 kayar ayarıyla değişir
 let SCALE = 100, OFFX = 0, OFFY = 0;
 
 function projRaw(x, y, z){ // fov=1 ham projeksiyon
@@ -499,17 +504,13 @@ function camSpace(x, y, z){ // kamera uzayı noktası (kamera orijinde)
   return [x, py*cosT - z*sinT, py*sinT + z*cosT + CAM_DIST];
 }
 
-function resize(){
-  DPR = Math.min(window.devicePixelRatio || 1, 2);
-  W = window.innerWidth; H = window.innerHeight;
-  canvas.width = W*DPR; canvas.height = H*DPR;
-  ctx2d.setTransform(DPR, 0, 0, DPR, 0, 0);
+function computeFit(){
   // sığdırma: sınır silindirinin uç noktalarını örnekleyip bbox'a göre ölçekle
   let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
   const rr = R_OUT + 0.6;
   for (let a = 0; a < 24; a++){
     const th = a/24 * Math.PI*2;
-    for (const y of [-1.7, ROWS + 2.6]){
+    for (const y of [-0.4, ROWS + 2.2]){
       const [px, py] = projRaw(rr*Math.cos(th), y, rr*Math.sin(th));
       minX = Math.min(minX, px); maxX = Math.max(maxX, px);
       minY = Math.min(minY, py); maxY = Math.max(maxY, py);
@@ -522,8 +523,32 @@ function resize(){
   OFFX = W/2 - SCALE*(minX+maxX)/2;
   OFFY = availH/2 - SCALE*(minY+maxY)/2;
 }
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W*DPR; canvas.height = H*DPR;
+  ctx2d.setTransform(DPR, 0, 0, DPR, 0, 0);
+  computeFit();
+}
 window.addEventListener("resize", resize);
+
+function setTilt(deg){
+  TILT = deg * Math.PI/180;
+  cosT = Math.cos(TILT);
+  sinT = Math.sin(TILT);
+  computeFit();
+}
+const tiltInput = document.getElementById("tilt");
+let savedTilt = NaN;
+try { savedTilt = parseFloat(localStorage.getItem("cubiq-tilt")); } catch (e) {}
+tiltInput.value = Number.isFinite(savedTilt) ? clamp(savedTilt, 5, 60) : 15;
+tiltInput.addEventListener("input", () => {
+  setTilt(parseFloat(tiltInput.value));
+  try { localStorage.setItem("cubiq-tilt", tiltInput.value); } catch (e) {}
+});
 resize();
+setTilt(parseFloat(tiltInput.value));
 
 /* ================= Çizim ================= */
 function poly(pts){
@@ -631,86 +656,6 @@ function drawCell(colCont, row, color, { alpha = 1, bright = 1, outline = true, 
   ctx2d.globalAlpha = 1;
 }
 
-function drawPedestal(){
-  const ellipse = (R, y) => {
-    ctx2d.beginPath();
-    for (let i = 0; i <= 40; i++){
-      const th = i/40 * Math.PI*2;
-      const [px, py] = proj(R*Math.cos(th), y, R*Math.sin(th));
-      if (i === 0) ctx2d.moveTo(px, py); else ctx2d.lineTo(px, py);
-    }
-    ctx2d.closePath();
-  };
-  const RD = R_OUT * 1.38, RB = R_OUT * 1.48;
-  const yTop = -0.1, yBot = -1.05;
-
-  // zemin gölgesi
-  const [gx, gy] = proj(0, yBot, 0);
-  ctx2d.save();
-  const sh = ctx2d.createRadialGradient(gx, gy, 0, gx, gy, RB*1.45*SCALE/CAM_DIST);
-  sh.addColorStop(0, "rgba(0,0,0,0.20)");
-  sh.addColorStop(1, "rgba(0,0,0,0)");
-  ctx2d.fillStyle = sh;
-  ellipse(RB*1.5, yBot - 0.02);
-  ctx2d.fill();
-  ctx2d.restore();
-
-  // gövde bandı (ön yarım): üst çemberin ön yayı + alt çemberin ters ön yayı
-  ctx2d.beginPath();
-  for (let i = 0; i <= 24; i++){
-    const th = i/24 * Math.PI; // ön yarı: 0..π (z>0 tarafı)
-    const [px, py] = proj(RD*Math.cos(th), yTop, RD*Math.sin(th));
-    if (i === 0) ctx2d.moveTo(px, py); else ctx2d.lineTo(px, py);
-  }
-  for (let i = 24; i >= 0; i--){
-    const th = i/24 * Math.PI;
-    const [px, py] = proj(RB*Math.cos(th), yBot, RB*Math.sin(th));
-    ctx2d.lineTo(px, py);
-  }
-  ctx2d.closePath();
-  const [, bandTopY] = proj(0, yTop, RD), [, bandBotY] = proj(0, yBot, RB);
-  const bandGrad = ctx2d.createLinearGradient(0, bandTopY, 0, bandBotY);
-  bandGrad.addColorStop(0, "#c8c8cd");
-  bandGrad.addColorStop(0.45, "#f2f2f5");
-  bandGrad.addColorStop(1, "#9d9da4");
-  ctx2d.fillStyle = bandGrad;
-  ctx2d.fill();
-
-  // tabak üstü
-  ellipse(RD, yTop);
-  const [tx, ty] = proj(0, yTop, 0);
-  const topGrad = ctx2d.createRadialGradient(tx, ty - SCALE*0.05, 0, tx, ty, RD*1.15*SCALE/CAM_DIST);
-  topGrad.addColorStop(0, "#ffffff");
-  topGrad.addColorStop(0.7, "#e4e4e8");
-  topGrad.addColorStop(1, "#b9b9c0");
-  ctx2d.fillStyle = topGrad;
-  ctx2d.fill();
-
-  // iç çukur (kulenin oturduğu yer)
-  ellipse(R_OUT*1.06, yTop + 0.02);
-  ctx2d.fillStyle = "rgba(160,160,168,0.5)";
-  ctx2d.fill();
-
-  // ön bantta CUBIQ yazısı
-  const [lx, ly] = proj(0, (yTop+yBot)/2 - 0.06, (RD+RB)/2);
-  const fs = SCALE * 0.055;
-  ctx2d.font = `bold ${fs}px "Trebuchet MS", sans-serif`;
-  ctx2d.textAlign = "center";
-  ctx2d.textBaseline = "middle";
-  const tg = ctx2d.createLinearGradient(0, ly - fs/2, 0, ly + fs/2);
-  tg.addColorStop(0, "#8e8e96");
-  tg.addColorStop(0.5, "#fdfdff");
-  tg.addColorStop(1, "#7b7b83");
-  ctx2d.save();
-  ctx2d.shadowColor = "rgba(0,0,0,0.25)";
-  ctx2d.shadowBlur = 2;
-  ctx2d.shadowOffsetY = 1;
-  ctx2d.fillStyle = tg;
-  ctx2d.letterSpacing = `${fs*0.22}px`;
-  ctx2d.fillText("CUBIQ", lx, ly);
-  ctx2d.restore();
-}
-
 // silindir yüzeyinde ince kılavuz kafes: satır halkaları + sütun sınırı dikey çizgiler
 function drawCage(){
   const R = R_OUT + 0.01;
@@ -771,7 +716,6 @@ function drawColumnGuides(){
 
 function render(now){
   ctx2d.clearRect(0, 0, W, H);
-  drawPedestal();
   drawCage();
   if (piece && state === "playing") drawColumnGuides();
 
