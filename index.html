@@ -220,7 +220,7 @@ let score = 0, rings = 0;
 let gravAcc = 0, softDrop = false, lockT = 0, lockResets = 0;
 let firstLocked = false; // ilk parça yere inene kadar silindir çevrilemez
 let clearing = null;    // { rows:[...], t0 }
-const FRONT = -Math.PI/2; // kameraya en yakın açı (dünya z ekseninin eksi yönü)
+const FRONT = -Math.PI/2 - Math.PI/6; // parçanın indiği açı: tam karşı değil, 30° solda
 let towerAngle = FRONT - 0.5*DELTA, towerTarget = towerAngle;
 let gameOverT = 0;
 let lastTime = 0;
