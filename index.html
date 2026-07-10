@@ -671,6 +671,9 @@ function drawCell(colCont, row, color, { alpha = 1, bright = 1, outline = true, 
     if (any){
       if (translucent) fills.push({ pts: g.border.map(toScr), fill: groupFill, seal: false });
       borders.push(g.border.map(toScr));
+    } else if (translucent){
+      // saydam hücrede arkada kalan kenar/köşe izleri de görünsün
+      borders.push(g.border.map(toScr));
     }
   }
 
