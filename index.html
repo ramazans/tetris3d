@@ -480,7 +480,7 @@ bindHold("tbHard", () => hardDrop(), null, false);
 /* ================= 3D projeksiyon (el yapımı) ================= */
 const ctx2d = canvas.getContext("2d");
 let W = 0, H = 0, DPR = 1;
-const TILT = Math.PI/4, CAM_DIST = 30, LOOK_Y = ROWS * 0.40; // tabana göre 45° tepeden bakış
+const TILT = 0.26, CAM_DIST = 30, LOOK_Y = ROWS * 0.45; // ~15°: yandan, hafif yukarıdan — silindirin tabanı görünmez
 const cosT = Math.cos(TILT), sinT = Math.sin(TILT);
 let SCALE = 100, OFFX = 0, OFFY = 0;
 
