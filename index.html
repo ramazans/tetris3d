@@ -662,9 +662,12 @@ function drawCell(colCont, row, color, { alpha = 1, bright = 1, outline = true, 
   const fog = clamp((cc[2] - (CAM_DIST - R_OUT)) / (2*R_OUT), 0, 1) * 0.55;
 
   const toScr = p => { const c = camSpace(p[0], p[1], p[2]); return [OFFX + c[0]/c[2]*SCALE, OFFY - c[1]/c[2]*SCALE]; };
+  // yarı saydam hücrede (hayalet) alt-dörtgen dikişleri koyu çizgi olarak görünür;
+  // bu yüzden yüz grubu tek parça (sınır yolu) olarak, tek renkle doldurulur
+  const translucent = alpha < 0.999;
   const fills = [], borders = [];
   for (const g of groups){
-    let any = false;
+    let any = false, groupFill = null;
     for (const q of g.quads){
       const cam = q.pts.map(p => camSpace(p[0], p[1], p[2]));
       const n = rotN(q.n);
@@ -674,12 +677,16 @@ function drawCell(colCont, row, color, { alpha = 1, bright = 1, outline = true, 
       if (n[0]*cx + n[1]*cy + n[2]*cz >= 0) continue; // arkaya bakan alt-yüzey
       any = true;
       const diff = Math.max(0, n[0]*LIGHT[0] + n[1]*LIGHT[1] + n[2]*LIGHT[2]);
-      fills.push({
-        pts: cam.map(c => [OFFX + c[0]/c[2]*SCALE, OFFY - c[1]/c[2]*SCALE]),
-        fill: shadeFog(color, (0.78 + 0.45*diff)*bright, fog),
-      });
+      const fill = shadeFog(color, (0.78 + 0.45*diff)*bright, fog);
+      groupFill = fill;
+      if (!translucent){
+        fills.push({ pts: cam.map(c => [OFFX + c[0]/c[2]*SCALE, OFFY - c[1]/c[2]*SCALE]), fill, seal: true });
+      }
     }
-    if (any) borders.push(g.border.map(toScr));
+    if (any){
+      if (translucent) fills.push({ pts: g.border.map(toScr), fill: groupFill, seal: false });
+      borders.push(g.border.map(toScr));
+    }
   }
 
   ctx2d.globalAlpha = alpha;
@@ -688,9 +695,11 @@ function drawCell(colCont, row, color, { alpha = 1, bright = 1, outline = true, 
     poly(f.pts);
     ctx2d.fillStyle = f.fill;
     ctx2d.fill();
-    ctx2d.strokeStyle = f.fill;
-    ctx2d.lineWidth = 1;
-    ctx2d.stroke();
+    if (f.seal){
+      ctx2d.strokeStyle = f.fill;
+      ctx2d.lineWidth = 1;
+      ctx2d.stroke();
+    }
   }
   if (outline){ // sonra hücre sınırı konturları (uzaktakiler siste soluklaşır)
     ctx2d.strokeStyle = `rgba(0,0,0,${(1 - fog).toFixed(3)})`;
