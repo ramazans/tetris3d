@@ -622,6 +622,7 @@ const LIGHT = (() => { const l = [-0.45, 0.75, -0.5]; const n = Math.hypot(...l)
 function rotN(n){ return [n[0], n[1]*cosT - n[2]*sinT, n[1]*sinT + n[2]*cosT]; }
 
 const SEGS = 3;                 // silindir kavisi için açısal alt bölme sayısı
+const OUTLINE_W = 1.2;          // küp kontur kalınlığı (piksel) — kamera ayarlarından bağımsız
 const BG_RGB = [233, 233, 236]; // derinlik sisinin hedef tonu (arka plan rengi)
 
 function shadeFog(hex, k, fog){
@@ -720,7 +721,7 @@ function drawCell(colCont, row, color, { alpha = 1, bright = 1, outline = true, 
   }
   if (outline){ // sonra hücre sınırı konturları (uzaktakiler siste soluklaşır)
     ctx2d.strokeStyle = `rgba(0,0,0,${(1 - fog).toFixed(3)})`;
-    ctx2d.lineWidth = Math.max(0.6, SCALE*0.0012);
+    ctx2d.lineWidth = OUTLINE_W;
     for (const b of borders){ poly(b); ctx2d.stroke(); }
   }
   ctx2d.globalAlpha = 1;
