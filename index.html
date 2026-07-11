@@ -128,14 +128,15 @@ const R_MID = (R_IN + R_OUT) / 2, THICK = (R_OUT - R_IN) / 2;
 const CELL_H = 1;
 const GRAVITY_MS = 800, SOFT_MS = 45, LOCK_MS = 320, CLEAR_MS = 380, FALL_MS = 420;
 
+// pastel palet — referans fotoğraftaki yumuşak tonlar (I ve O aynı aileden türetildi)
 const PIECES = {
-  I: { color: "#00b7d6", cells: [[-1,0],[0,0],[1,0],[2,0]] },
-  O: { color: "#f5d800", cells: [[0,0],[1,0],[0,1],[1,1]] },
-  T: { color: "#7a1fa8", cells: [[-1,0],[0,0],[1,0],[0,1]] },
-  S: { color: "#1f8c2e", cells: [[-1,0],[0,0],[0,1],[1,1]] },
-  Z: { color: "#d41f2c", cells: [[0,0],[1,0],[-1,1],[0,1]] },
-  L: { color: "#e87511", cells: [[-1,0],[0,0],[1,0],[1,1]] },
-  J: { color: "#1f3fd4", cells: [[-1,0],[0,0],[1,0],[-1,1]] },
+  I: { color: "#5fc4d4", cells: [[-1,0],[0,0],[1,0],[2,0]] },
+  O: { color: "#f0c968", cells: [[0,0],[1,0],[0,1],[1,1]] },
+  T: { color: "#b491e0", cells: [[-1,0],[0,0],[1,0],[0,1]] },
+  S: { color: "#6fbf73", cells: [[-1,0],[0,0],[0,1],[1,1]] },
+  Z: { color: "#e26b7c", cells: [[0,0],[1,0],[-1,1],[0,1]] },
+  L: { color: "#eda45c", cells: [[-1,0],[0,0],[1,0],[1,1]] },
+  J: { color: "#6f9ceb", cells: [[-1,0],[0,0],[1,0],[-1,1]] },
 };
 
 /* ================= Yardımcılar ================= */
@@ -719,12 +720,34 @@ function drawCell(colCont, row, color, { alpha = 1, bright = 1, outline = true, 
       ctx2d.stroke();
     }
   }
-  if (outline){ // sonra hücre sınırı konturları (uzaktakiler siste soluklaşır)
-    ctx2d.strokeStyle = `rgba(0,0,0,${(1 - fog).toFixed(3)})`;
+  if (outline){ // sonra hücre sınırı konturları: rengin koyu tonu (siyah değil), siste soluklaşır
+    ctx2d.strokeStyle = shadeFog(color, 0.6, fog);
     ctx2d.lineWidth = OUTLINE_W;
     for (const b of borders){ poly(b); ctx2d.stroke(); }
   }
   ctx2d.globalAlpha = 1;
+}
+
+// hafif zemin gölgesi: kulenin altında yumuşak elips
+function drawShadow(){
+  const [gx, gy] = proj(0, -0.05, 0);
+  const [ex] = proj(R_OUT*1.35, -0.05, 0);
+  const rad = Math.max(20, Math.abs(ex - gx));
+  const g = ctx2d.createRadialGradient(gx, gy, 0, gx, gy, rad);
+  g.addColorStop(0, "rgba(0,0,0,0.10)");
+  g.addColorStop(0.7, "rgba(0,0,0,0.05)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx2d.save();
+  // elipsi zemin düzleminin projeksiyonuna yatır
+  const [, topY] = proj(0, -0.05, -R_OUT*1.35);
+  const [, botY] = proj(0, -0.05, R_OUT*1.35);
+  const squashY = Math.max(0.05, Math.abs(botY - topY) / (2*rad));
+  ctx2d.translate(gx, gy);
+  ctx2d.scale(1, squashY);
+  ctx2d.translate(-gx, -gy);
+  ctx2d.fillStyle = g;
+  ctx2d.fillRect(gx - rad, gy - rad, rad*2, rad*2);
+  ctx2d.restore();
 }
 
 // taban kılavuzu: blokların zemine oturduğu halka — iç/dış çember + dilim ayırıcıları
@@ -758,6 +781,7 @@ function drawBaseGuide(){
 
 function render(now){
   ctx2d.clearRect(0, 0, W, H);
+  drawShadow();
   if (showGuide) drawBaseGuide();
 
   const list = []; // { depth, draw() }
