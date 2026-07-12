@@ -24,6 +24,22 @@
   }
   #mute:active { transform: scale(.92); }
 
+  #hud {
+    position: fixed; top: 68px; right: 12px; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 12px 16px; border-radius: 16px;
+    background: rgba(255,255,255,.65); box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    backdrop-filter: blur(4px);
+  }
+  #hud .lbl {
+    font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #888;
+  }
+  #hud #nextCv { width: 60px; height: 38px; }
+  #hud #scoreVal {
+    font-size: 22px; font-weight: bold; color: #555;
+    font-variant-numeric: tabular-nums;
+  }
+
   #camCtl {
     position: fixed; top: 12px; left: 12px; z-index: 10;
     display: flex; flex-direction: column; gap: 6px;
@@ -78,6 +94,12 @@
 <body>
 <canvas id="game"></canvas>
 <button id="mute" title="Ses aç/kapat">🔊</button>
+<div id="hud">
+  <div class="lbl">Sonraki</div>
+  <canvas id="nextCv" width="120" height="76"></canvas>
+  <div class="lbl">Puan</div>
+  <div id="scoreVal">0</div>
+</div>
 <div id="camCtl">
   <div class="row" title="Bakış açısı">
     <span>🎥</span>
@@ -226,6 +248,7 @@ const Sfx = (() => {
 let grid;               // grid[row][col] = null | hücre nesnesi
 let piece = null;       // { key, color, cells, col, row, visRow }
 let bag = [];
+let nextKey = null;     // sıradaki parça (sağdaki önizlemede gösterilir)
 let state = "start";    // start | playing | paused | gameover
 let score = 0, rings = 0;
 let gravAcc = 0, softDrop = false, lockT = 0, lockResets = 0;
@@ -268,7 +291,10 @@ function collides(cells, col, row){
 }
 
 function spawnPiece(){
-  const key = nextFromBag();
+  if (!nextKey) nextKey = nextFromBag();
+  const key = nextKey;
+  nextKey = nextFromBag();
+  drawNext();
   const p = PIECES[key];
   const col = frontColCont();
   const pc = { key, color: p.color, cells: p.cells.map(c => c.slice()), col, row: ROWS, visRow: ROWS + 0.8 };
@@ -374,7 +400,7 @@ function gameOver(){
 
 function restart(){
   grid = emptyGrid();
-  bag = []; score = 0; rings = 0;
+  bag = []; nextKey = null; score = 0; rings = 0;
   clearing = null; softDrop = false;
   firstLocked = false;
   state = "playing";
@@ -418,6 +444,34 @@ muteBtn.addEventListener("click", () => {
   muteBtn.textContent = muted ? "🔇" : "🔊";
   if (!muted) Sfx.unlock();
 });
+
+/* ================= HUD: sıradaki parça (2D) + puan ================= */
+const nextCv = document.getElementById("nextCv");
+const nextCtx = nextCv.getContext("2d");
+function drawNext(){
+  const w = nextCv.width, h = nextCv.height;
+  nextCtx.clearRect(0, 0, w, h);
+  if (!nextKey) return;
+  const p = PIECES[nextKey];
+  let minC = 9, maxC = -9, minR = 9, maxR = -9;
+  for (const [dc, dr] of p.cells){
+    minC = Math.min(minC, dc); maxC = Math.max(maxC, dc);
+    minR = Math.min(minR, dr); maxR = Math.max(maxR, dr);
+  }
+  const s = Math.min(26, w/(maxC-minC+1), h/(maxR-minR+1));
+  const ox = (w - (maxC-minC+1)*s)/2, oy = (h - (maxR-minR+1)*s)/2;
+  nextCtx.lineWidth = 2;
+  for (const [dc, dr] of p.cells){
+    const x = ox + (dc-minC)*s;
+    const y = oy + (maxR-dr)*s; // dRow yukarı yönlü — ekranda ters çevrilir
+    nextCtx.fillStyle = p.color;
+    nextCtx.fillRect(x+1, y+1, s-2, s-2);
+    nextCtx.strokeStyle = shade(p.color, 0.6);
+    nextCtx.strokeRect(x+1, y+1, s-2, s-2);
+  }
+}
+const scoreEl = document.getElementById("scoreVal");
+let shownScore = -1;
 
 /* ================= Girdi: klavye (kendi DAS tekrarı ile) ================= */
 const held = {}; // key -> { t: basılı kalma süresi, fired: ilk tekrar oldu mu }
@@ -884,6 +938,7 @@ function frame(t){
   lastTime = now;
   update(dt, now);
   render(now);
+  if (score !== shownScore){ shownScore = score; scoreEl.textContent = score; }
   requestAnimationFrame(frame);
 }
 
