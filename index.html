@@ -259,7 +259,7 @@ function spawnPiece(){
   drawNext();
   const p = PIECES[key];
   const col = frontColCont();
-  const pc = { key, color: p.color, cells: p.cells.map(c => c.slice()), col, row: ROWS, visRow: ROWS + 0.8 };
+  const pc = { key, color: p.color, cells: p.cells.map(c => c.slice()), col, visCol: col, row: ROWS, visRow: ROWS + 0.8 };
   if (collides(pc.cells, pc.col, pc.row)) { gameOver(); return; }
   piece = pc;
   gravAcc = 0; lockT = 0; lockResets = 0;
@@ -804,12 +804,12 @@ function render(now){
     const gRow = dropRow();
     if (gRow < piece.row){
       for (const [dc, dr] of piece.cells){
-        pushCell(piece.col + dc, gRow + dr, piece.color, { alpha: 0.42, outline: true, skip: skipFor(dc, dr) });
+        pushCell(piece.visCol + dc, gRow + dr, piece.color, { alpha: 0.42, outline: true, skip: skipFor(dc, dr) });
       }
     }
     // düşen parça
     for (const [dc, dr] of piece.cells){
-      pushCell(piece.col + dc, piece.visRow + dr, piece.color, { bright: 1.08, skip: skipFor(dc, dr) });
+      pushCell(piece.visCol + dc, piece.visRow + dr, piece.color, { bright: 1.08, skip: skipFor(dc, dr) });
     }
   }
 
@@ -833,6 +833,8 @@ function update(dt, now){
   if (!piece) return;
 
   piece.visRow += (piece.row - piece.visRow) * Math.min(1, dt*16);
+  // görsel sütun kuleyle AYNI hızda yumuşar → parça ekranda zıplamadan önde kalır
+  piece.visCol += (piece.col - piece.visCol) * Math.min(1, dt*12);
 
   if (collides(piece.cells, piece.col, piece.row - 1)){
     lockT += dt*1000;
