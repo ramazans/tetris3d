@@ -24,7 +24,7 @@
   }
   #hud .lbl {
     font-size: 12px; letter-spacing: .08em; color: #888;
-    margin-top: 4px;
+    margin-top: 14px;
   }
   #hud .lbl:first-child { margin-top: 0; }
   #hud #nextCv { width: 60px; height: 38px; }
@@ -407,14 +407,16 @@ function drawNext(){
   }
   const s = Math.min(26, w/(maxC-minC+1), h/(maxR-minR+1));
   const ox = (w - (maxC-minC+1)*s)/2, oy = (h - (maxR-minR+1)*s)/2;
+  // önce tüm dolgular, sonra çizgiler: bitişik karelerin ortak kenarında
+  // çizgiler aynı koordinata düştüğü için tek (çift kalınlıkta olmayan) border oluşur
   nextCtx.lineWidth = 2;
+  nextCtx.fillStyle = p.color;
   for (const [dc, dr] of p.cells){
-    const x = ox + (dc-minC)*s;
-    const y = oy + (maxR-dr)*s; // dRow yukarı yönlü — ekranda ters çevrilir
-    nextCtx.fillStyle = p.color;
-    nextCtx.fillRect(x+1, y+1, s-2, s-2);
-    nextCtx.strokeStyle = shade(p.color, 0.6);
-    nextCtx.strokeRect(x+1, y+1, s-2, s-2);
+    nextCtx.fillRect(ox + (dc-minC)*s, oy + (maxR-dr)*s, s, s);
+  }
+  nextCtx.strokeStyle = shade(p.color, 0.6);
+  for (const [dc, dr] of p.cells){
+    nextCtx.strokeRect(ox + (dc-minC)*s, oy + (maxR-dr)*s, s, s);
   }
 }
 const scoreEl = document.getElementById("scoreVal");
