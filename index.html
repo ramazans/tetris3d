@@ -67,11 +67,7 @@
   <canvas id="nextCv" width="120" height="76"></canvas>
 </div>
 <div id="overlay">
-  <p id="ovMsg">
-    ← → kuleyi döndür &nbsp;•&nbsp; ↑ parçayı çevir<br>
-    ↓ hızlı indir &nbsp;•&nbsp; Boşluk: bırak &nbsp;•&nbsp; P: duraklat<br>
-    Mobilde: kaydır &nbsp;•&nbsp; dokun: çevir &nbsp;•&nbsp; aşağı kaydır: bırak
-  </p>
+  <p id="ovMsg"></p>
   <button id="ovBtn">Başla</button>
 </div>
 
@@ -352,6 +348,11 @@ function restart(){
 const overlay = document.getElementById("overlay");
 const ovMsg = document.getElementById("ovMsg");
 const ovBtn = document.getElementById("ovBtn");
+// başlangıç yönergeleri cihaza göre: telefon/tablet dokunmatik, bilgisayar klavye
+const IS_TOUCH = window.matchMedia("(pointer: coarse)").matches;
+ovMsg.innerHTML = IS_TOUCH
+  ? "sağa/sola kaydır: kuleyi döndür<br>dokun: parçayı çevir &nbsp;•&nbsp; aşağı kaydır: bırak"
+  : "← → kuleyi döndür &nbsp;•&nbsp; ↑ parçayı çevir<br>↓ hızlı indir &nbsp;•&nbsp; Boşluk: bırak &nbsp;•&nbsp; P: duraklat";
 function showOverlay(msg, btn){
   ovMsg.innerHTML = msg;
   ovBtn.textContent = btn;
