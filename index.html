@@ -19,15 +19,21 @@
     position: fixed; top: 12px; right: 12px; z-index: 10;
     display: flex; flex-direction: column; align-items: center; gap: 4px;
     padding: 12px 16px; border-radius: 16px;
-    background: rgba(255,255,255,.65); box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    background: rgba(255,255,255,.40); box-shadow: 0 2px 8px rgba(0,0,0,.12);
     backdrop-filter: blur(4px);
   }
   #hud .lbl {
-    font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #888;
+    font-size: 12px; letter-spacing: .08em; color: #888;
+    margin-top: 4px;
   }
+  #hud .lbl:first-child { margin-top: 0; }
   #hud #nextCv { width: 60px; height: 38px; }
   #hud #scoreVal {
     font-size: 22px; font-weight: bold; color: #555;
+    font-variant-numeric: tabular-nums;
+  }
+  #hud #timeVal {
+    font-size: 18px; font-weight: bold; color: #555;
     font-variant-numeric: tabular-nums;
   }
 
@@ -66,10 +72,12 @@
 <body>
 <canvas id="game"></canvas>
 <div id="hud">
-  <div class="lbl">Sonraki</div>
-  <canvas id="nextCv" width="120" height="76"></canvas>
-  <div class="lbl">Puan</div>
+  <div class="lbl">SCORE</div>
   <div id="scoreVal">0</div>
+  <div class="lbl">TIME</div>
+  <div id="timeVal">0:00</div>
+  <div class="lbl">NEXT</div>
+  <canvas id="nextCv" width="120" height="76"></canvas>
 </div>
 <div id="overlay">
   <p id="ovMsg">
@@ -348,7 +356,7 @@ function gameOver(){
 
 function restart(){
   grid = emptyGrid();
-  bag = []; nextKey = null; score = 0; rings = 0;
+  bag = []; nextKey = null; score = 0; rings = 0; elapsed = 0;
   clearing = null; softDrop = false;
   firstLocked = false;
   state = "playing";
@@ -410,7 +418,9 @@ function drawNext(){
   }
 }
 const scoreEl = document.getElementById("scoreVal");
-let shownScore = -1;
+const timeEl = document.getElementById("timeVal");
+let shownScore = -1, shownTime = "";
+let elapsed = 0; // oynanan süre (sn) — duraklatmada saymaz
 
 /* ================= Girdi: klavye (kendi DAS tekrarı ile) ================= */
 const held = {}; // key -> { t: basılı kalma süresi, fired: ilk tekrar oldu mu }
@@ -805,6 +815,7 @@ function update(dt, now){
   towerAngle += (towerTarget - towerAngle) * Math.min(1, dt*12);
 
   if (state !== "playing") return;
+  elapsed += dt;
   processDAS(dt*1000);
 
   if (clearing){
@@ -839,6 +850,8 @@ function frame(t){
   update(dt, now);
   render(now);
   if (score !== shownScore){ shownScore = score; scoreEl.textContent = score; }
+  const tStr = `${Math.floor(elapsed/60)}:${String(Math.floor(elapsed%60)).padStart(2, "0")}`;
+  if (tStr !== shownTime){ shownTime = tStr; timeEl.textContent = tStr; }
   requestAnimationFrame(frame);
 }
 
