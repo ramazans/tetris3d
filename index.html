@@ -54,19 +54,6 @@
   }
   #overlay button:active { transform: translateY(4px); box-shadow: 0 2px 0 #9c141e; }
 
-  #touchbar {
-    position: fixed; right: 14px; top: 50%; transform: translateY(-50%);
-    z-index: 10; display: none; pointer-events: none;
-  }
-  #touchbar button {
-    pointer-events: auto;
-    width: 58px; height: 58px; border-radius: 50%; border: none;
-    font-size: 22px; color: #555;
-    background: rgba(255,255,255,.55); box-shadow: 0 2px 8px rgba(0,0,0,.18);
-    backdrop-filter: blur(4px);
-  }
-  #touchbar button:active { background: rgba(255,255,255,.9); transform: scale(.92); }
-  @media (pointer: coarse) { #touchbar { display: flex; } }
 </style>
 </head>
 <body>
@@ -83,14 +70,11 @@
   <p id="ovMsg">
     ← → kuleyi döndür &nbsp;•&nbsp; ↑ parçayı çevir<br>
     ↓ hızlı indir &nbsp;•&nbsp; Boşluk: bırak &nbsp;•&nbsp; P: duraklat<br>
-    Mobilde: kaydır &amp; dokun
+    Mobilde: kaydır &nbsp;•&nbsp; dokun: çevir &nbsp;•&nbsp; basılı tut: bırak
   </p>
   <button id="ovBtn">Başla</button>
 </div>
 
-<div id="touchbar">
-  <button id="tbSoft">▼</button>
-</div>
 
 <script>
 "use strict";
@@ -461,21 +445,36 @@ function processDAS(dtMs){
 
 /* ================= Girdi: dokunmatik ================= */
 const canvas = document.getElementById("game");
-let touch = null;
+let touch = null, pressTimer = null;
+function cancelPress(){
+  if (pressTimer){ clearTimeout(pressTimer); pressTimer = null; }
+}
 canvas.addEventListener("pointerdown", e => {
   Sfx.unlock();
   if (state !== "playing") return;
   touch = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now(), acted: false };
   canvas.setPointerCapture(e.pointerId);
+  // basılı tutma = bırak (klavyedeki Boşluk gibi hard drop)
+  cancelPress();
+  pressTimer = setTimeout(() => {
+    pressTimer = null;
+    if (touch && !touch.acted && state === "playing"){
+      touch.acted = true;
+      hardDrop();
+    }
+  }, 380);
 });
 canvas.addEventListener("pointermove", e => {
   if (!touch || state !== "playing") return;
+  // parmak belirgin oynarsa basılı tutma iptal — bu bir kaydırmadır
+  if (Math.abs(e.clientX - touch.sx) > 12 || Math.abs(e.clientY - touch.sy) > 12) cancelPress();
   const stepPx = Math.max(36, window.innerWidth * 0.07);
   let dx = e.clientX - touch.x;
   while (dx <= -stepPx){ tryMove(-1); touch.x -= stepPx; dx += stepPx; touch.acted = true; }
   while (dx >= stepPx){ tryMove(1); touch.x += stepPx; dx -= stepPx; touch.acted = true; }
 });
 canvas.addEventListener("pointerup", e => {
+  cancelPress();
   if (!touch) return;
   const dt = performance.now() - touch.t;
   const dxT = e.clientX - touch.sx, dyT = e.clientY - touch.sy;
@@ -485,31 +484,8 @@ canvas.addEventListener("pointerup", e => {
   }
   touch = null;
 });
-canvas.addEventListener("pointercancel", () => { touch = null; });
+canvas.addEventListener("pointercancel", () => { cancelPress(); touch = null; });
 
-// alt buton şeridi
-function bindHold(id, onPress, onRelease, repeat){
-  const el = document.getElementById(id);
-  let timer = null, rep = null;
-  const down = e => {
-    e.preventDefault(); Sfx.unlock();
-    if (state !== "playing") return;
-    onPress();
-    if (repeat){
-      timer = setTimeout(() => { rep = setInterval(onPress, ARR_MS); }, DAS_MS);
-    }
-  };
-  const up = e => {
-    e.preventDefault();
-    clearTimeout(timer); clearInterval(rep); timer = rep = null;
-    if (onRelease) onRelease();
-  };
-  el.addEventListener("pointerdown", down);
-  el.addEventListener("pointerup", up);
-  el.addEventListener("pointercancel", up);
-  el.addEventListener("pointerleave", up);
-}
-bindHold("tbSoft", () => { softDrop = true; }, () => { softDrop = false; }, false);
 
 /* ================= 3D projeksiyon (el yapımı) ================= */
 const ctx2d = canvas.getContext("2d");
