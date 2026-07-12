@@ -219,7 +219,6 @@ let firstLocked = false; // ilk parça yere inene kadar silindir çevrilemez
 let clearing = null;    // { rows:[...], t0 }
 const FRONT = -Math.PI/2 - Math.PI/9; // parçanın indiği açı: tam karşı değil, 20° solda
 let towerAngle = FRONT - 0.5*DELTA, towerTarget = towerAngle;
-let gameOverT = 0;
 let lastTime = 0;
 
 function newCell(color){
@@ -356,7 +355,6 @@ function finishClear(){
 function gameOver(){
   state = "gameover";
   piece = null;
-  gameOverT = performance.now()/1000;
   Sfx.over();
   showOverlay(
     `<span class="ovTitle">GAME OVER</span>` +
@@ -762,7 +760,6 @@ function render(now){
     list.push({ depth: d, draw: () => drawCell(colCont, row, color, opts, yOff) });
   };
 
-  const gray = state === "gameover" ? clamp((now - gameOverT)*1.6, 0, 1) : 0;
   // düşüş animasyonları aynı fazdaysa hücreler kaynaşık çizilir
   const sameFall = (a, b) => a.fallFrom === b.fallFrom && a.fallT === b.fallT;
 
@@ -782,13 +779,6 @@ function render(now){
         const p = clamp((now - clearing.t0)/(CLEAR_MS/1000), 0, 1);
         if (Math.floor(p*6) % 2 === 0) bright = 3;
       }
-      let color = cell.color;
-      if (gray > 0){
-        const [rr, gg, bb] = hexToRgb(color);
-        const l = 0.3*rr + 0.6*gg + 0.1*bb;
-        color = `#${[rr + (l-rr)*gray, gg + (l-gg)*gray, bb + (l-bb)*gray]
-          .map(v => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
-      }
       const up = r+1 < GRID_H ? grid[r+1][c] : null;
       const down = r-1 >= 0 ? grid[r-1][c] : null;
       const skip = {
@@ -797,7 +787,7 @@ function render(now){
         top: !!(up && sameFall(up, cell)),
         bottom: !!(down && sameFall(down, cell)),
       };
-      pushCell(c, r, color, { alpha, bright: bright * (1 - 0.25*gray), skip }, yOff);
+      pushCell(c, r, cell.color, { alpha, bright, skip }, yOff);
     }
   }
 
