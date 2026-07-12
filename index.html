@@ -15,17 +15,8 @@
   }
   #game { display: block; width: 100vw; height: 100vh; touch-action: none; }
 
-  #mute {
-    position: fixed; top: 12px; right: 12px; z-index: 10;
-    width: 44px; height: 44px; border-radius: 50%;
-    border: none; font-size: 20px; cursor: pointer;
-    background: rgba(255,255,255,.65); box-shadow: 0 2px 8px rgba(0,0,0,.15);
-    backdrop-filter: blur(4px);
-  }
-  #mute:active { transform: scale(.92); }
-
   #hud {
-    position: fixed; top: 68px; right: 12px; z-index: 10;
+    position: fixed; top: 12px; right: 12px; z-index: 10;
     display: flex; flex-direction: column; align-items: center; gap: 4px;
     padding: 12px 16px; border-radius: 16px;
     background: rgba(255,255,255,.65); box-shadow: 0 2px 8px rgba(0,0,0,.15);
@@ -39,25 +30,6 @@
     font-size: 22px; font-weight: bold; color: #555;
     font-variant-numeric: tabular-nums;
   }
-
-  #camCtl {
-    position: fixed; top: 12px; left: 12px; z-index: 10;
-    display: flex; flex-direction: column; gap: 6px;
-    padding: 10px 14px; border-radius: 16px; font-size: 15px;
-    background: rgba(255,255,255,.65); box-shadow: 0 2px 8px rgba(0,0,0,.15);
-    backdrop-filter: blur(4px);
-  }
-  #camCtl .row { display: flex; align-items: center; gap: 8px; }
-  #camCtl input { width: 110px; accent-color: #888; }
-  #camCtl .val {
-    min-width: 44px; text-align: right; color: #555;
-    font-variant-numeric: tabular-nums; font-size: 13px;
-  }
-  #camCtl .cageLbl {
-    display: flex; align-items: center; gap: 6px;
-    color: #555; font-size: 13px; cursor: pointer;
-  }
-  #camCtl .cageLbl input { width: auto; accent-color: #888; }
 
   #overlay {
     position: fixed; inset: 0; z-index: 20;
@@ -93,35 +65,12 @@
 </head>
 <body>
 <canvas id="game"></canvas>
-<button id="mute" title="Ses aç/kapat">🔊</button>
 <div id="hud">
   <div class="lbl">Sonraki</div>
   <canvas id="nextCv" width="120" height="76"></canvas>
   <div class="lbl">Puan</div>
   <div id="scoreVal">0</div>
 </div>
-<div id="camCtl">
-  <div class="row" title="Bakış açısı">
-    <span>🎥</span>
-    <input id="tilt" type="range" min="-60" max="60" step="1" value="15">
-    <span class="val" id="tiltVal">15°</span>
-  </div>
-  <div class="row" title="Kamera uzaklığı">
-    <span>📏</span>
-    <input id="dist" type="range" min="12" max="80" step="1" value="30">
-    <span class="val" id="distVal">30</span>
-  </div>
-  <div class="row" title="Kamera yüksekliği (z ekseni)">
-    <span>↕️</span>
-    <input id="camy" type="range" min="-6" max="18" step="1" value="5">
-    <span class="val" id="camyVal">5</span>
-  </div>
-  <div class="row" title="Kılavuz çizgileri">
-    <span>▦</span>
-    <label class="cageLbl"><input id="cage" type="checkbox" checked> Kılavuz</label>
-  </div>
-</div>
-
 <div id="overlay">
   <p id="ovMsg">
     ← → kuleyi döndür &nbsp;•&nbsp; ↑ parçayı çevir<br>
@@ -222,7 +171,6 @@ const Sfx = (() => {
 
   return {
     unlock(){ ensure(); },
-    setMuted(m){ muted = m; },
     // kule dönüşü: kısa blip
     move(){ tone({f0: 880, dur: 0.03, vol: 0.07}); },
     // parça döndürme: iki tonlu bi-dip
@@ -436,15 +384,6 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden && state === "playing") togglePause();
 });
 
-const muteBtn = document.getElementById("mute");
-let muted = false;
-muteBtn.addEventListener("click", () => {
-  muted = !muted;
-  Sfx.setMuted(muted);
-  muteBtn.textContent = muted ? "🔇" : "🔊";
-  if (!muted) Sfx.unlock();
-});
-
 /* ================= HUD: sıradaki parça (2D) + puan ================= */
 const nextCv = document.getElementById("nextCv");
 const nextCtx = nextCv.getContext("2d");
@@ -563,9 +502,11 @@ bindHold("tbSoft", () => { softDrop = true; }, () => { softDrop = false; }, fals
 /* ================= 3D projeksiyon (el yapımı) ================= */
 const ctx2d = canvas.getContext("2d");
 let W = 0, H = 0, DPR = 1;
-let CAM_Y = 5;                    // kamera yüksekliği (z ekseni) — ekrandaki ↕️ kayar ayarıyla değişir
-let CAM_DIST = 30;                // kamera uzaklığı — ekrandaki 📏 kayar ayarıyla değişir
-let TILT = 0, cosT = 1, sinT = 0; // bakış açısı — ekrandaki 🎥 kayar ayarıyla değişir
+// sabit kamera: kullanıcı tarafından seçilen değerler (açı -8°, uzaklık 40, yükseklik 10)
+const CAM_Y = 10;
+const CAM_DIST = 40;
+const TILT = -8 * Math.PI/180;
+const cosT = Math.cos(TILT), sinT = Math.sin(TILT);
 let SCALE = 100, OFFX = 0, OFFY = 0;
 
 function projRaw(x, y, z){ // fov=1 ham projeksiyon
@@ -609,48 +550,7 @@ function resize(){
 }
 window.addEventListener("resize", resize);
 
-function setTilt(deg){
-  TILT = deg * Math.PI/180;
-  cosT = Math.cos(TILT);
-  sinT = Math.sin(TILT);
-  document.getElementById("tiltVal").textContent = `${Math.round(deg)}°`;
-  computeFit();
-}
-function setDist(d){
-  CAM_DIST = d;
-  document.getElementById("distVal").textContent = `${Math.round(d)}`;
-  computeFit();
-}
-function setCamY(v){
-  CAM_Y = v;
-  document.getElementById("camyVal").textContent = `${Math.round(v)}`;
-  computeFit();
-}
-// kayar ayar kalıbı: localStorage'dan yükle, girişte uygula ve sakla
-function bindSlider(id, storeKey, apply, def){
-  const el = document.getElementById(id);
-  let saved = NaN;
-  try { saved = parseFloat(localStorage.getItem(storeKey)); } catch (e) {}
-  el.value = Number.isFinite(saved) ? clamp(saved, +el.min, +el.max) : def;
-  el.addEventListener("input", () => {
-    apply(parseFloat(el.value));
-    try { localStorage.setItem(storeKey, el.value); } catch (e) {}
-  });
-  apply(parseFloat(el.value));
-}
 resize();
-bindSlider("tilt", "cubiq-tilt", setTilt, 15);
-bindSlider("dist", "cubiq-dist", setDist, 30);
-bindSlider("camy", "cubiq-camy", setCamY, 5);
-
-let showGuide = true;
-const cageInput = document.getElementById("cage");
-try { showGuide = localStorage.getItem("cubiq-guide") !== "0"; } catch (e) {}
-cageInput.checked = showGuide;
-cageInput.addEventListener("change", () => {
-  showGuide = cageInput.checked;
-  try { localStorage.setItem("cubiq-guide", showGuide ? "1" : "0"); } catch (e) {}
-});
 
 /* ================= Çizim ================= */
 function poly(pts){
@@ -825,7 +725,7 @@ function drawBaseGuide(){
 function render(now){
   ctx2d.clearRect(0, 0, W, H);
   drawShadow();
-  if (showGuide) drawBaseGuide();
+  drawBaseGuide();
 
   const list = []; // { depth, draw() }
   const pushCell = (colCont, row, color, opts, yOff = 0) => {
