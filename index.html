@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -45,6 +45,10 @@
   }
   #overlay.hidden { display: none; }
   #overlay p { margin: 6px 0 22px; color: #666; font-size: 15px; line-height: 1.6; }
+  #overlay .ovTitle {
+    display: block; margin-bottom: 10px;
+    font-size: 34px; font-weight: bold; letter-spacing: .12em; color: #b8202d;
+  }
   #overlay button {
     font-size: 22px; font-weight: bold; color: #fff; cursor: pointer;
     padding: 14px 46px; border: none; border-radius: 40px;
@@ -68,7 +72,7 @@
 </div>
 <div id="overlay">
   <p id="ovMsg"></p>
-  <button id="ovBtn">Başla</button>
+  <button id="ovBtn">Start</button>
 </div>
 
 
@@ -108,6 +112,9 @@ function shade(hex, k){ // k>1 açar, k<1 koyulaştırır
 }
 function easeOutCubic(x){
   return 1 - Math.pow(1 - x, 3);
+}
+function formatTime(sec){
+  return `${Math.floor(sec/60)}:${String(Math.floor(sec%60)).padStart(2, "0")}`;
 }
 
 /* ================= Ses (Web Audio, klasik arcade — dosyasız sentez) ================= */
@@ -331,7 +338,10 @@ function gameOver(){
   piece = null;
   gameOverT = performance.now()/1000;
   Sfx.over();
-  showOverlay("Oyun bitti! Kule doldu.<br>Tekrar denemek ister misin?", "Yeniden Başla");
+  showOverlay(
+    `<span class="ovTitle">GAME OVER</span>Score: ${score} &nbsp;•&nbsp; Time: ${formatTime(elapsed)}`,
+    "Play Again"
+  );
 }
 
 function restart(){
@@ -351,8 +361,8 @@ const ovBtn = document.getElementById("ovBtn");
 // başlangıç yönergeleri cihaza göre: telefon/tablet dokunmatik, bilgisayar klavye
 const IS_TOUCH = window.matchMedia("(pointer: coarse)").matches;
 ovMsg.innerHTML = IS_TOUCH
-  ? "sağa/sola kaydır: kuleyi döndür<br>dokun: parçayı çevir &nbsp;•&nbsp; aşağı kaydır: bırak"
-  : "← → kuleyi döndür &nbsp;•&nbsp; ↑ parçayı çevir<br>↓ hızlı indir &nbsp;•&nbsp; Boşluk: bırak &nbsp;•&nbsp; P: duraklat";
+  ? "swipe left/right: rotate tower<br>tap: rotate piece &nbsp;•&nbsp; swipe down: drop"
+  : "← → rotate tower &nbsp;•&nbsp; ↑ rotate piece<br>↓ soft drop &nbsp;•&nbsp; Space: drop &nbsp;•&nbsp; P: pause";
 function showOverlay(msg, btn){
   ovMsg.innerHTML = msg;
   ovBtn.textContent = btn;
@@ -368,7 +378,7 @@ ovBtn.addEventListener("click", () => {
 function togglePause(){
   if (state === "playing"){
     state = "paused";
-    showOverlay("Duraklatıldı", "Devam Et");
+    showOverlay("Paused", "Resume");
   } else if (state === "paused"){
     state = "playing"; hideOverlay();
   }
@@ -834,7 +844,7 @@ function frame(t){
   update(dt, now);
   render(now);
   if (score !== shownScore){ shownScore = score; scoreEl.textContent = score; }
-  const tStr = `${Math.floor(elapsed/60)}:${String(Math.floor(elapsed%60)).padStart(2, "0")}`;
+  const tStr = formatTime(elapsed);
   if (tStr !== shownTime){ shownTime = tStr; timeEl.textContent = tStr; }
   requestAnimationFrame(frame);
 }
