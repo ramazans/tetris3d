@@ -712,11 +712,12 @@ function render(now){
   if (state === "playing"){
     const lvl = dangerLevel();
     if (lvl > 0){
-      // tepe tehlike halkası: kırmızı, yanıp sönen; seviye arttıkça belirgin ve hızlı
-      const baseA = [0, 0.25, 0.35, 0.50][lvl];
+      // tepe tehlike halkası: baştan itibaren net kırmızı (gri gibi görünmesin),
+      // yanıp sönme tabanı yüksek; seviye arttıkça biraz belirginleşir ve hızlanır
+      const baseA = [0, 0.24, 0.30, 0.36][lvl];
       const freq = [0, 4, 6, 9][lvl];
-      const blink = 0.5 + 0.5*Math.sin(now*freq);
-      drawGuideRing(ROWS*CELL_H, "#d92b2c", baseA * (0.4 + 0.6*blink), lvl >= 3 ? 2 : 1);
+      const blink = 0.65 + 0.35*Math.sin(now*freq);
+      drawGuideRing(ROWS*CELL_H, "#ff3040", baseA * blink);
     }
   }
 
