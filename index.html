@@ -46,8 +46,28 @@
   #overlay.hidden { display: none; }
   #overlay p { margin: 6px 0 22px; color: #666; font-size: 15px; line-height: 1.6; }
   #overlay .ovTitle {
-    display: block; margin-bottom: 10px;
-    font-size: 34px; font-weight: bold; letter-spacing: .12em; color: #b8202d;
+    display: block; margin-bottom: 18px;
+    font-family: ui-rounded, "SF Pro Rounded", "Trebuchet MS", "Segoe UI", sans-serif;
+    font-size: clamp(36px, 9vw, 52px); font-weight: 800;
+    letter-spacing: .1em; color: #d6404e;
+    text-shadow: 0 2px 0 rgba(0,0,0,.08);
+  }
+  #overlay .ovStats {
+    display: flex; gap: 0; margin-bottom: 6px;
+    padding: 16px 0; border-radius: 16px;
+    background: rgba(255,255,255,.5); box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    backdrop-filter: blur(4px);
+  }
+  #overlay .stat {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    min-width: 130px; padding: 0 18px;
+  }
+  #overlay .stat + .stat { border-left: 1px solid rgba(0,0,0,.10); }
+  #overlay .stLbl { font-size: 12px; letter-spacing: .08em; color: #888; }
+  #overlay .stVal {
+    font-family: ui-rounded, "SF Pro Rounded", "Trebuchet MS", "Segoe UI", sans-serif;
+    font-size: 34px; font-weight: bold; color: #555;
+    font-variant-numeric: tabular-nums;
   }
   #overlay button {
     font-size: 22px; font-weight: bold; color: #fff; cursor: pointer;
@@ -339,7 +359,11 @@ function gameOver(){
   gameOverT = performance.now()/1000;
   Sfx.over();
   showOverlay(
-    `<span class="ovTitle">GAME OVER</span>Score: ${score} &nbsp;•&nbsp; Time: ${formatTime(elapsed)}`,
+    `<span class="ovTitle">GAME OVER</span>` +
+    `<span class="ovStats">` +
+      `<span class="stat"><span class="stLbl">SCORE</span><span class="stVal">${score}</span></span>` +
+      `<span class="stat"><span class="stLbl">TIME</span><span class="stVal">${formatTime(elapsed)}</span></span>` +
+    `</span>`,
     "Play Again"
   );
 }
