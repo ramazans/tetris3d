@@ -177,13 +177,6 @@ const Sfx = (() => {
     over(){
       [400, 300, 200].forEach((f, i) => tone({f0: f, dur: 0.22, vol: 0.14, delay: i*0.24}));
     },
-    // tehlike alarmı: çift bip — seviye arttıkça daha tiz ve daha yüksek
-    alarm(level = 1){
-      const f = 660 + level*110;
-      const v = 0.07 + level*0.03;
-      tone({f0: f, dur: 0.07, vol: v});
-      tone({f0: f*0.8, dur: 0.09, vol: v, delay: 0.11});
-    },
   };
 })();
 
@@ -196,7 +189,6 @@ let state = "start";    // start | playing | paused | gameover
 let score = 0, rings = 0;
 let gravAcc = 0, softDrop = false, lockT = 0, lockResets = 0;
 let firstLocked = false; // ilk parça yere inene kadar silindir çevrilemez
-let lastAlarmAt = -9;    // tehlike alarmının son çalma anı (sn)
 let clearing = null;    // { rows:[...], t0 }
 const FRONT = -Math.PI/2 - Math.PI/9; // parçanın indiği açı: tam karşı değil, 20° solda
 let towerAngle = FRONT - 0.5*DELTA, towerTarget = towerAngle;
@@ -347,7 +339,6 @@ function restart(){
   bag = []; nextKey = null; score = 0; rings = 0; elapsed = 0;
   clearing = null; softDrop = false;
   firstLocked = false;
-  lastAlarmAt = -9;
   state = "playing";
   hideOverlay();
   spawnPiece();
@@ -809,16 +800,6 @@ function update(dt, now){
   if (state !== "playing") return;
   elapsed += dt;
   processDAS(dt*1000);
-
-  // tehlike alarmı: seviye yükseldikçe bipler sıklaşır
-  const lvl = dangerLevel();
-  if (lvl > 0){
-    const interval = [0, 1.6, 0.9, 0.5][lvl];
-    if (now - lastAlarmAt >= interval){
-      lastAlarmAt = now;
-      Sfx.alarm(lvl);
-    }
-  }
 
   if (clearing){
     if (now - clearing.t0 >= CLEAR_MS/1000) finishClear();
