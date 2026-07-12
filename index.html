@@ -70,7 +70,7 @@
   <p id="ovMsg">
     ← → kuleyi döndür &nbsp;•&nbsp; ↑ parçayı çevir<br>
     ↓ hızlı indir &nbsp;•&nbsp; Boşluk: bırak &nbsp;•&nbsp; P: duraklat<br>
-    Mobilde: kaydır &nbsp;•&nbsp; dokun: çevir &nbsp;•&nbsp; basılı tut: bırak
+    Mobilde: kaydır &nbsp;•&nbsp; dokun: çevir &nbsp;•&nbsp; aşağı kaydır: bırak
   </p>
   <button id="ovBtn">Başla</button>
 </div>
@@ -445,36 +445,21 @@ function processDAS(dtMs){
 
 /* ================= Girdi: dokunmatik ================= */
 const canvas = document.getElementById("game");
-let touch = null, pressTimer = null;
-function cancelPress(){
-  if (pressTimer){ clearTimeout(pressTimer); pressTimer = null; }
-}
+let touch = null;
 canvas.addEventListener("pointerdown", e => {
   Sfx.unlock();
   if (state !== "playing") return;
   touch = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now(), acted: false };
   canvas.setPointerCapture(e.pointerId);
-  // basılı tutma = bırak (klavyedeki Boşluk gibi hard drop)
-  cancelPress();
-  pressTimer = setTimeout(() => {
-    pressTimer = null;
-    if (touch && !touch.acted && state === "playing"){
-      touch.acted = true;
-      hardDrop();
-    }
-  }, 380);
 });
 canvas.addEventListener("pointermove", e => {
   if (!touch || state !== "playing") return;
-  // parmak belirgin oynarsa basılı tutma iptal — bu bir kaydırmadır
-  if (Math.abs(e.clientX - touch.sx) > 12 || Math.abs(e.clientY - touch.sy) > 12) cancelPress();
   const stepPx = Math.max(36, window.innerWidth * 0.07);
   let dx = e.clientX - touch.x;
   while (dx <= -stepPx){ tryMove(-1); touch.x -= stepPx; dx += stepPx; touch.acted = true; }
   while (dx >= stepPx){ tryMove(1); touch.x += stepPx; dx -= stepPx; touch.acted = true; }
 });
 canvas.addEventListener("pointerup", e => {
-  cancelPress();
   if (!touch) return;
   const dt = performance.now() - touch.t;
   const dxT = e.clientX - touch.sx, dyT = e.clientY - touch.sy;
@@ -484,7 +469,7 @@ canvas.addEventListener("pointerup", e => {
   }
   touch = null;
 });
-canvas.addEventListener("pointercancel", () => { cancelPress(); touch = null; });
+canvas.addEventListener("pointercancel", () => { touch = null; });
 
 
 /* ================= 3D projeksiyon (el yapımı) ================= */
