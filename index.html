@@ -215,7 +215,6 @@ let nextKey = null;     // sıradaki parça (sağdaki önizlemede gösterilir)
 let state = "start";    // start | playing | paused | gameover
 let score = 0, rings = 0;
 let gravAcc = 0, softDrop = false, lockT = 0, lockResets = 0;
-let firstLocked = false; // ilk parça yere inene kadar silindir çevrilemez
 let clearing = null;    // { rows:[...], t0 }
 const FRONT = -Math.PI/2 - Math.PI/9; // parçanın indiği açı: tam karşı değil, 20° solda
 let towerAngle = FRONT - 0.5*DELTA, towerTarget = towerAngle;
@@ -273,7 +272,7 @@ function dropRow(){ // gölge (hayalet) satırı
 }
 
 function tryMove(dir){
-  if (!piece || !firstLocked) return;
+  if (!piece) return;
   if (!collides(piece.cells, piece.col + dir, piece.row)){
     piece.col += dir;
     towerTarget = FRONT - (piece.col + 0.5)*DELTA;
@@ -313,7 +312,6 @@ function lockPiece(){
     if (r >= 0 && r < GRID_H) grid[r][c] = newCell(piece.color);
   }
   Sfx.lock();
-  firstLocked = true;
   piece = null;
   if (overflow){ gameOver(); return; }
 
@@ -368,9 +366,9 @@ function gameOver(){
 
 function restart(){
   grid = emptyGrid();
+  randomizeBaseColors();
   bag = []; nextKey = null; score = 0; rings = 0; elapsed = 0;
   clearing = null; softDrop = false;
-  firstLocked = false;
   state = "playing";
   hideOverlay();
   spawnPiece();
@@ -726,6 +724,34 @@ function drawGuideRing(y, strokeStyle, alpha, lineWidth = 1){
   ctx2d.globalAlpha = 1;
 }
 
+// taban dilimleri: taş paletinden rastgele renklerle içi dolu (her oyunda yeniden karılır)
+let baseColors = [];
+function randomizeBaseColors(){
+  const pal = Object.values(PIECES).map(p => p.color);
+  baseColors = Array.from({ length: COLS }, () => pal[Math.floor(Math.random()*pal.length)]);
+}
+function drawBaseSlots(){
+  ctx2d.globalAlpha = 0.40;
+  for (let c = 0; c < COLS; c++){
+    const a0 = c*DELTA + towerAngle, a1 = a0 + DELTA;
+    ctx2d.beginPath();
+    for (let i = 0; i <= 4; i++){
+      const th = a0 + (a1-a0)*i/4;
+      const [px, py] = proj(R_OUT*Math.cos(th), 0, R_OUT*Math.sin(th));
+      if (i === 0) ctx2d.moveTo(px, py); else ctx2d.lineTo(px, py);
+    }
+    for (let i = 4; i >= 0; i--){
+      const th = a0 + (a1-a0)*i/4;
+      const [px, py] = proj(R_IN*Math.cos(th), 0, R_IN*Math.sin(th));
+      ctx2d.lineTo(px, py);
+    }
+    ctx2d.closePath();
+    ctx2d.fillStyle = baseColors[c];
+    ctx2d.fill();
+  }
+  ctx2d.globalAlpha = 1;
+}
+
 // tehlike seviyesi: oyunun bitmesine kalan satır sayısına göre 0 (yok) … 3 (kritik)
 function dangerLevel(){
   let top = 0;
@@ -740,6 +766,7 @@ function dangerLevel(){
 function render(now){
   ctx2d.clearRect(0, 0, W, H);
   drawShadow();
+  drawBaseSlots();
   drawGuideRing(0, "#888", 0.55);
   if (state === "playing"){
     const lvl = dangerLevel();
@@ -866,6 +893,7 @@ function frame(t){
 }
 
 grid = emptyGrid();
+randomizeBaseColors();
 requestAnimationFrame(frame);
 </script>
 </body>
