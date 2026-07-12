@@ -61,8 +61,8 @@
   #overlay button:active { transform: translateY(4px); box-shadow: 0 2px 0 #9c141e; }
 
   #touchbar {
-    position: fixed; left: 0; right: 0; bottom: max(10px, env(safe-area-inset-bottom));
-    z-index: 10; display: none; justify-content: center; gap: 10px; pointer-events: none;
+    position: fixed; right: 14px; top: 50%; transform: translateY(-50%);
+    z-index: 10; display: none; pointer-events: none;
   }
   #touchbar button {
     pointer-events: auto;
@@ -110,11 +110,7 @@
 </div>
 
 <div id="touchbar">
-  <button id="tbL">◀</button>
-  <button id="tbRot">⟳</button>
   <button id="tbSoft">▼</button>
-  <button id="tbHard">⤓</button>
-  <button id="tbR">▶</button>
 </div>
 
 <script>
@@ -508,11 +504,7 @@ function bindHold(id, onPress, onRelease, repeat){
   el.addEventListener("pointercancel", up);
   el.addEventListener("pointerleave", up);
 }
-bindHold("tbL", () => tryMove(-1), null, true);
-bindHold("tbR", () => tryMove(1), null, true);
-bindHold("tbRot", () => tryRotate(), null, false);
 bindHold("tbSoft", () => { softDrop = true; }, () => { softDrop = false; }, false);
-bindHold("tbHard", () => hardDrop(), null, false);
 
 /* ================= 3D projeksiyon (el yapımı) ================= */
 const ctx2d = canvas.getContext("2d");
@@ -549,12 +541,9 @@ function computeFit(){
       minY = Math.min(minY, py); maxY = Math.max(maxY, py);
     }
   }
-  // dokunmatik cihazlarda alt buton şeridine yer bırak
-  const reserve = window.matchMedia("(pointer: coarse)").matches ? 90 : 0;
-  const availH = H - reserve;
-  SCALE = Math.min(W*0.95/(maxX-minX), availH*0.94/(maxY-minY));
+  SCALE = Math.min(W*0.95/(maxX-minX), H*0.94/(maxY-minY));
   OFFX = W/2 - SCALE*(minX+maxX)/2;
-  OFFY = availH/2 - SCALE*(minY+maxY)/2;
+  OFFY = H/2 - SCALE*(minY+maxY)/2;
 }
 
 function resize(){
