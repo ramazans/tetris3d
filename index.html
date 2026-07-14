@@ -77,6 +77,8 @@
     transition: transform .08s;
   }
   #overlay button:active { transform: translateY(4px); box-shadow: 0 2px 0 #9c141e; }
+  #overlay #ovBtn { margin: 30px 0; }
+  #overlay #ovExtra { display: flex; flex-direction: column; align-items: center; width: 100%; }
 
   #overlay .ovName {
     display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -140,6 +142,7 @@
 <div id="overlay">
   <p id="ovMsg"></p>
   <button id="ovBtn">Start</button>
+  <div id="ovExtra"></div>
 </div>
 
 
@@ -479,19 +482,20 @@ function gameOver(){
   const finalScore = score, finalTime = Math.floor(elapsed);
   const savedName = (function(){ try { return localStorage.getItem("cubiq-name") || ""; } catch (e) { return ""; } })().slice(0, 16);
 
-  let html =
+  // ovMsg: başlık + skor kartı (butonun ÜSTÜNDE)
+  const msg =
     `<span class="ovTitle">GAME OVER</span>` +
     `<span class="ovStats">` +
       `<span class="stat"><span class="stLbl">SCORE</span><span class="stVal">${finalScore}</span></span>` +
       `<span class="stat"><span class="stLbl">TIME</span><span class="stVal">${formatTime(finalTime)}</span></span>` +
     `</span>`;
-  if (SUPA_ON){
-    html +=
-      `<span class="ovName"><span class="stLbl">YOUR NAME</span>` +
+  // ovExtra: isim kutusu + rekorlar (butonun ALTINDA)
+  const extra = SUPA_ON
+    ? `<span class="ovName"><span class="stLbl">YOUR NAME</span>` +
         `<input id="ovNameInput" maxlength="16" placeholder="—" value="${escapeHtml(savedName)}" autocomplete="off"></span>` +
-      recordsCardHtml();
-  }
-  showOverlay(html, "Play Again");
+      recordsCardHtml()
+    : "";
+  showOverlay(msg, "Play Again", extra);
 
   if (SUPA_ON){
     goName = ""; goScore = finalScore; goTime = finalTime;
@@ -531,14 +535,16 @@ function restart(){
 const overlay = document.getElementById("overlay");
 const ovMsg = document.getElementById("ovMsg");
 const ovBtn = document.getElementById("ovBtn");
+const ovExtra = document.getElementById("ovExtra"); // butonun ALTINDA kalan içerik (isim + rekorlar)
 // başlangıç yönergeleri cihaza göre: telefon/tablet dokunmatik, bilgisayar klavye
 const IS_TOUCH = window.matchMedia("(pointer: coarse)").matches;
 ovMsg.innerHTML = IS_TOUCH
   ? "swipe left/right: rotate tower<br>tap: rotate piece &nbsp;•&nbsp; swipe down: drop"
   : "← → rotate tower &nbsp;•&nbsp; ↑ rotate piece<br>↓ soft drop &nbsp;•&nbsp; Space: drop &nbsp;•&nbsp; P: pause";
-function showOverlay(msg, btn){
+function showOverlay(msg, btn, extra){
   ovMsg.innerHTML = msg;
   ovBtn.textContent = btn;
+  ovExtra.innerHTML = extra || "";
   overlay.classList.remove("hidden");
 }
 function hideOverlay(){ overlay.classList.add("hidden"); }
