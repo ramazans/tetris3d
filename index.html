@@ -91,23 +91,40 @@
   }
   #overlay .ovName input:focus { border-color: #d6404e; }
   #overlay .ovRecords {
-    display: flex; flex-direction: column; width: 300px; max-width: 84vw; margin-bottom: 20px;
+    display: flex; flex-direction: column; width: 320px; max-width: 86vw; margin-bottom: 20px;
     border-radius: 16px; overflow: hidden;
     background: rgba(255,255,255,.5); box-shadow: 0 2px 8px rgba(0,0,0,.12);
     backdrop-filter: blur(4px);
   }
+  #overlay .recHead { display: flex; justify-content: center; border-bottom: 1px solid rgba(0,0,0,.08); }
+  #overlay .recSel {
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+    border: none; background: transparent; cursor: pointer;
+    font-family: ui-rounded, "SF Pro Rounded", "Trebuchet MS", "Segoe UI", sans-serif;
+    font-weight: bold; font-size: 13px; letter-spacing: .08em; color: #888;
+    text-align: center; text-align-last: center;
+    padding: 11px 24px 11px 16px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round'/></svg>");
+    background-repeat: no-repeat; background-position: right 7px center;
+  }
+  #overlay .recSel:focus { outline: none; }
+  #overlay .recList { display: flex; flex-direction: column; }
   #overlay .recRow {
-    display: flex; align-items: center; gap: 8px; padding: 9px 16px; font-size: 15px;
+    display: flex; align-items: center; gap: 10px; padding: 9px 16px; font-size: 15px;
   }
   #overlay .recRow + .recRow { border-top: 1px solid rgba(0,0,0,.08); }
-  #overlay .recLbl { flex: 0 0 74px; text-align: left; font-size: 11px; letter-spacing: .05em; color: #888; }
+  #overlay .recRank { flex: 0 0 18px; text-align: center; font-size: 13px; font-weight: bold; color: #aaa; }
   #overlay .recName {
     flex: 1 1 auto; text-align: left; color: #555; font-weight: bold;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   #overlay .recScore { flex: 0 0 auto; color: #555; font-weight: bold; font-variant-numeric: tabular-nums; }
+  #overlay .recTime { flex: 0 0 44px; text-align: right; color: #999; font-size: 13px; font-variant-numeric: tabular-nums; }
   #overlay .recRow.recMine { background: rgba(214,64,78,.14); }
-  #overlay .recRow.recMine .recName, #overlay .recRow.recMine .recScore { color: #c02636; }
+  #overlay .recRow.recMine .recName,
+  #overlay .recRow.recMine .recScore,
+  #overlay .recRow.recMine .recRank { color: #c02636; }
+  #overlay .recEmpty { padding: 16px; color: #999; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -201,39 +218,45 @@ function periodStart(kind){
   return d.toISOString();
 }
 
-// bir dönemin en yüksek skoru → { name, score } | null
-async function fetchTop(kind){
-  let url = SUPA_URL + "/rest/v1/scores?select=name,score&order=score.desc,created_at.asc&limit=1";
+// bir dönemin ilk N skoru → [{ name, score, time_seconds }, ...]
+async function fetchTops(kind, limit = 3){
+  let url = SUPA_URL + "/rest/v1/scores?select=name,score,time_seconds&order=score.desc,created_at.asc&limit=" + limit;
   if (kind !== "all") url += "&created_at=gte." + encodeURIComponent(periodStart(kind));
   try {
     const res = await fetch(url, { headers: supaHeaders() });
-    if (!res.ok) return null;
-    const rows = await res.json();
-    return rows[0] || null;
-  } catch (e) { return null; }
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (e) { return []; }
 }
 
-const REC_PERIODS = [["DAILY", "day"], ["WEEKLY", "week"], ["MONTHLY", "month"], ["ALL-TIME", "all"]];
-function recordRowsHtml(){
-  return REC_PERIODS.map(([label, key]) =>
-    `<span class="recRow" id="rec-${key}">` +
-      `<span class="recLbl">${label}</span>` +
-      `<span class="recName">…</span>` +
-      `<span class="recScore"></span>` +
-    `</span>`
-  ).join("");
+// dönem seçici (combobox — tasarım olarak düz metin gibi görünür) + ilk 3 liste
+const REC_PERIODS = [["ALL-TIME", "all"], ["MONTHLY", "month"], ["WEEKLY", "week"], ["DAILY", "day"]];
+// oyun sonu oturumunda kendi kaydımızı vurgulamak için
+let goName = "", goScore = null, goTime = null;
+
+function recordsCardHtml(){
+  return `<span class="ovRecords">` +
+    `<span class="recHead"><select class="recSel" id="recSel">` +
+      REC_PERIODS.map(([l, k]) => `<option value="${k}">${l}</option>`).join("") +
+    `</select></span>` +
+    `<span class="recList" id="recList"><span class="recEmpty">…</span></span>` +
+  `</span>`;
 }
-async function loadRecords(myScore){
-  const keys = REC_PERIODS.map(p => p[1]);
-  const results = await Promise.all(keys.map(fetchTop));
-  keys.forEach((k, i) => {
-    const row = document.getElementById("rec-" + k);
-    if (!row) return;
-    const top = results[i];
-    row.querySelector(".recName").textContent = top ? top.name : "—";
-    row.querySelector(".recScore").textContent = top ? top.score : "0";
-    row.classList.toggle("recMine", myScore != null && top && myScore > 0 && myScore >= top.score);
-  });
+async function loadRecords(period){
+  const list = document.getElementById("recList");
+  if (!list) return;
+  const rows = await fetchTops(period, 3);
+  if (document.getElementById("recSel")?.value !== period) return; // seçim değiştiyse eski yanıtı yok say
+  if (!rows.length){ list.innerHTML = `<span class="recEmpty">No scores yet</span>`; return; }
+  list.innerHTML = rows.map((r, i) => {
+    const mine = goName && r.name === goName && r.score === goScore && r.time_seconds === goTime;
+    return `<span class="recRow${mine ? " recMine" : ""}">` +
+      `<span class="recRank">${i + 1}</span>` +
+      `<span class="recName">${escapeHtml(r.name)}</span>` +
+      `<span class="recScore">${r.score}</span>` +
+      `<span class="recTime">${formatTime(r.time_seconds)}</span>` +
+    `</span>`;
+  }).join("");
 }
 
 /* ================= Ses (Web Audio, klasik arcade — dosyasız sentez) ================= */
@@ -466,21 +489,26 @@ function gameOver(){
     html +=
       `<span class="ovName"><span class="stLbl">YOUR NAME</span>` +
         `<input id="ovNameInput" maxlength="16" placeholder="—" value="${escapeHtml(savedName)}" autocomplete="off"></span>` +
-      `<span class="ovRecords">${recordRowsHtml()}</span>`;
+      recordsCardHtml();
   }
   showOverlay(html, "Play Again");
 
   if (SUPA_ON){
-    loadRecords(null); // mevcut rekorları hemen göster
+    goName = ""; goScore = finalScore; goTime = finalTime;
+    const sel = document.getElementById("recSel");
+    sel.addEventListener("change", () => loadRecords(sel.value));
+    loadRecords(sel.value); // seçili dönemi hemen göster
+
     const input = document.getElementById("ovNameInput");
     let submitted = false;
     const doSubmit = async () => {
       const nm = input.value.trim();
       if (submitted || !nm) return;
       submitted = true;
+      goName = nm.slice(0, 16);
       try { localStorage.setItem("cubiq-name", nm); } catch (e) {}
       await submitScore(nm, finalScore, finalTime);
-      loadRecords(finalScore); // kendi skorumuzu dahil ederek yenile (rekor vurgusu)
+      loadRecords(sel.value); // kendi skorumuzu dahil ederek yenile (vurgu)
     };
     input.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); doSubmit(); input.blur(); } });
     input.addEventListener("blur", doSubmit);
