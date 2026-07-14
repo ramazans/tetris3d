@@ -92,6 +92,7 @@
     background: rgba(255,255,255,.7); outline: none;
   }
   #overlay .ovName input:focus { border-color: #d6404e; }
+  #overlay .ovName input::placeholder { color: #b7b7bd; font-weight: normal; }
   #overlay .ovRecords {
     display: flex; flex-direction: column; width: 320px; max-width: 86vw; margin-bottom: 20px;
     border-radius: 16px; overflow: hidden;
@@ -491,8 +492,8 @@ function gameOver(){
     `</span>`;
   // ovExtra: isim kutusu + rekorlar (butonun ALTINDA)
   const extra = SUPA_ON
-    ? `<span class="ovName"><span class="stLbl">YOUR NAME</span>` +
-        `<input id="ovNameInput" maxlength="16" placeholder="—" value="${escapeHtml(savedName)}" autocomplete="off"></span>` +
+    ? `<span class="ovName">` +
+        `<input id="ovNameInput" maxlength="16" placeholder="Your name" value="${escapeHtml(savedName)}" autocomplete="off"></span>` +
       recordsCardHtml()
     : "";
   showOverlay(msg, "Play Again", extra);
@@ -514,10 +515,11 @@ function gameOver(){
       await submitScore(nm, finalScore, finalTime);
       loadRecords(sel.value); // kendi skorumuzu dahil ederek yenile (vurgu)
     };
+    // Gönderim yalnızca oyuncu kutuyu doldurup çıkınca / Enter'a basınca / Play Again'e basınca olur.
+    // Kutu boşsa hiç gönderilmez (rekor listesine eklenmez). Otomatik gönderim yok → ismi değiştirmek serbest.
     input.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); doSubmit(); input.blur(); } });
     input.addEventListener("blur", doSubmit);
-    ovBtn.addEventListener("click", doSubmit, { once: true }); // Play Again da gönderir
-    if (savedName) doSubmit(); // kayıtlı isim varsa otomatik gönder
+    ovBtn.addEventListener("click", doSubmit, { once: true }); // Play Again da (doluysa) gönderir
   }
 }
 
