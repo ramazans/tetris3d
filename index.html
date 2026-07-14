@@ -41,7 +41,7 @@
     position: fixed; inset: 0; z-index: 20;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     background: rgba(240,240,244,.55); backdrop-filter: blur(5px);
-    text-align: center; padding: 20px;
+    text-align: center; padding: 20px; overflow-y: auto;
   }
   #overlay.hidden { display: none; }
   #overlay p { margin: 6px 0 22px; color: #666; font-size: 15px; line-height: 1.6; }
@@ -78,6 +78,36 @@
   }
   #overlay button:active { transform: translateY(4px); box-shadow: 0 2px 0 #9c141e; }
 
+  #overlay .ovName {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    margin-bottom: 14px;
+  }
+  #overlay .ovName input {
+    width: 200px; text-align: center;
+    font-family: ui-rounded, "SF Pro Rounded", "Trebuchet MS", "Segoe UI", sans-serif;
+    font-size: 20px; font-weight: bold; color: #555;
+    padding: 8px 12px; border: 1px solid rgba(0,0,0,.15); border-radius: 12px;
+    background: rgba(255,255,255,.7); outline: none;
+  }
+  #overlay .ovName input:focus { border-color: #d6404e; }
+  #overlay .ovRecords {
+    display: flex; flex-direction: column; width: 300px; max-width: 84vw; margin-bottom: 20px;
+    border-radius: 16px; overflow: hidden;
+    background: rgba(255,255,255,.5); box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    backdrop-filter: blur(4px);
+  }
+  #overlay .recRow {
+    display: flex; align-items: center; gap: 8px; padding: 9px 16px; font-size: 15px;
+  }
+  #overlay .recRow + .recRow { border-top: 1px solid rgba(0,0,0,.08); }
+  #overlay .recLbl { flex: 0 0 74px; text-align: left; font-size: 11px; letter-spacing: .05em; color: #888; }
+  #overlay .recName {
+    flex: 1 1 auto; text-align: left; color: #555; font-weight: bold;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #overlay .recScore { flex: 0 0 auto; color: #555; font-weight: bold; font-variant-numeric: tabular-nums; }
+  #overlay .recRow.recMine { background: rgba(214,64,78,.14); }
+  #overlay .recRow.recMine .recName, #overlay .recRow.recMine .recScore { color: #c02636; }
 </style>
 </head>
 <body>
@@ -135,6 +165,75 @@ function easeOutCubic(x){
 }
 function formatTime(sec){
   return `${Math.floor(sec/60)}:${String(Math.floor(sec%60)).padStart(2, "0")}`;
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+/* ================= Skor tablosu (Supabase REST — SDK'sız fetch) ================= */
+// Boş bırakılırsa skor tablosu tamamen kapalıdır; oyun aynen çalışır.
+const SUPA_URL = "https://lnftfovvzyntesibloov.supabase.co";
+const SUPA_KEY = "sb_publishable_rNKiuEnqs1Bft0BCXZXymg_K2xYCkzw";
+const SUPA_ON = !!(SUPA_URL && SUPA_KEY);
+
+function supaHeaders(extra){
+  return Object.assign({ apikey: SUPA_KEY, Authorization: "Bearer " + SUPA_KEY }, extra || {});
+}
+
+async function submitScore(name, sc, timeSec){
+  if (!SUPA_ON || !name) return false;
+  try {
+    const res = await fetch(SUPA_URL + "/rest/v1/scores", {
+      method: "POST",
+      headers: supaHeaders({ "Content-Type": "application/json", Prefer: "return=minimal" }),
+      body: JSON.stringify({ name: name.slice(0, 16), score: sc, time_seconds: timeSec }),
+    });
+    return res.ok;
+  } catch (e) { return false; }
+}
+
+// dönem başlangıcı (oyuncunun yerel saatiyle) → ISO
+function periodStart(kind){
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  if (kind === "week"){ const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); } // Pazartesi başı
+  else if (kind === "month"){ d.setDate(1); }
+  return d.toISOString();
+}
+
+// bir dönemin en yüksek skoru → { name, score } | null
+async function fetchTop(kind){
+  let url = SUPA_URL + "/rest/v1/scores?select=name,score&order=score.desc,created_at.asc&limit=1";
+  if (kind !== "all") url += "&created_at=gte." + encodeURIComponent(periodStart(kind));
+  try {
+    const res = await fetch(url, { headers: supaHeaders() });
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return rows[0] || null;
+  } catch (e) { return null; }
+}
+
+const REC_PERIODS = [["DAILY", "day"], ["WEEKLY", "week"], ["MONTHLY", "month"], ["ALL-TIME", "all"]];
+function recordRowsHtml(){
+  return REC_PERIODS.map(([label, key]) =>
+    `<span class="recRow" id="rec-${key}">` +
+      `<span class="recLbl">${label}</span>` +
+      `<span class="recName">…</span>` +
+      `<span class="recScore"></span>` +
+    `</span>`
+  ).join("");
+}
+async function loadRecords(myScore){
+  const keys = REC_PERIODS.map(p => p[1]);
+  const results = await Promise.all(keys.map(fetchTop));
+  keys.forEach((k, i) => {
+    const row = document.getElementById("rec-" + k);
+    if (!row) return;
+    const top = results[i];
+    row.querySelector(".recName").textContent = top ? top.name : "—";
+    row.querySelector(".recScore").textContent = top ? top.score : "0";
+    row.classList.toggle("recMine", myScore != null && top && myScore > 0 && myScore >= top.score);
+  });
 }
 
 /* ================= Ses (Web Audio, klasik arcade — dosyasız sentez) ================= */
@@ -354,14 +453,40 @@ function gameOver(){
   state = "gameover";
   piece = null;
   Sfx.over();
-  showOverlay(
+  const finalScore = score, finalTime = Math.floor(elapsed);
+  const savedName = (function(){ try { return localStorage.getItem("cubiq-name") || ""; } catch (e) { return ""; } })().slice(0, 16);
+
+  let html =
     `<span class="ovTitle">GAME OVER</span>` +
     `<span class="ovStats">` +
-      `<span class="stat"><span class="stLbl">SCORE</span><span class="stVal">${score}</span></span>` +
-      `<span class="stat"><span class="stLbl">TIME</span><span class="stVal">${formatTime(elapsed)}</span></span>` +
-    `</span>`,
-    "Play Again"
-  );
+      `<span class="stat"><span class="stLbl">SCORE</span><span class="stVal">${finalScore}</span></span>` +
+      `<span class="stat"><span class="stLbl">TIME</span><span class="stVal">${formatTime(finalTime)}</span></span>` +
+    `</span>`;
+  if (SUPA_ON){
+    html +=
+      `<span class="ovName"><span class="stLbl">YOUR NAME</span>` +
+        `<input id="ovNameInput" maxlength="16" placeholder="—" value="${escapeHtml(savedName)}" autocomplete="off"></span>` +
+      `<span class="ovRecords">${recordRowsHtml()}</span>`;
+  }
+  showOverlay(html, "Play Again");
+
+  if (SUPA_ON){
+    loadRecords(null); // mevcut rekorları hemen göster
+    const input = document.getElementById("ovNameInput");
+    let submitted = false;
+    const doSubmit = async () => {
+      const nm = input.value.trim();
+      if (submitted || !nm) return;
+      submitted = true;
+      try { localStorage.setItem("cubiq-name", nm); } catch (e) {}
+      await submitScore(nm, finalScore, finalTime);
+      loadRecords(finalScore); // kendi skorumuzu dahil ederek yenile (rekor vurgusu)
+    };
+    input.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); doSubmit(); input.blur(); } });
+    input.addEventListener("blur", doSubmit);
+    ovBtn.addEventListener("click", doSubmit, { once: true }); // Play Again da gönderir
+    if (savedName) doSubmit(); // kayıtlı isim varsa otomatik gönder
+  }
 }
 
 function restart(){
