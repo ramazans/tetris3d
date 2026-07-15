@@ -524,7 +524,13 @@ function gameOver(){
   if (SUPA_ON){
     goName = ""; goScore = finalScore; goTime = finalTime;
     const sel = document.getElementById("recSel");
-    sel.addEventListener("change", () => loadRecords(sel.value));
+    // Daha önce seçilen rekor dönemini localStorage'dan geri yükle.
+    const savedPeriod = (function(){ try { return localStorage.getItem("cubiq-period") || ""; } catch (e) { return ""; } })();
+    if (REC_PERIODS.some(([, k]) => k === savedPeriod)) sel.value = savedPeriod;
+    sel.addEventListener("change", () => {
+      try { localStorage.setItem("cubiq-period", sel.value); } catch (e) {}
+      loadRecords(sel.value);
+    });
     loadRecords(sel.value); // seçili dönemi hemen göster
 
     const input = document.getElementById("ovNameInput");
