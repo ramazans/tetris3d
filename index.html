@@ -661,8 +661,6 @@ document.addEventListener("keydown", e => {
   if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"," "].includes(k)) e.preventDefault();
   if (e.repeat) return;
   Sfx.unlock();
-  if (k === "p" || k === "P"){ togglePause(); return; }
-  if (k === "r" || k === "R"){ if (state !== "start") restart(); return; }
   if (state !== "playing") return;
   if (k === "ArrowLeft"){ tryMove(-1); held[k] = { t: 0, fired: false }; }
   else if (k === "ArrowRight"){ tryMove(1); held[k] = { t: 0, fired: false }; }
