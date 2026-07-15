@@ -529,11 +529,10 @@ function gameOver(){
       await submitScore(nm, finalScore, finalTime);
       loadRecords(sel.value); // kendi skorumuzu dahil ederek yenile (vurgu)
     };
-    // Gönderim yalnızca oyuncu kutuyu doldurup çıkınca / Enter'a basınca / Play Again'e basınca olur.
-    // Kutu boşsa hiç gönderilmez (rekor listesine eklenmez). Otomatik gönderim yok → ismi değiştirmek serbest.
+    // Gönderim yalnızca oyuncu kutuyu doldurup çıkınca / Enter'a basınca olur.
+    // Kutu boşsa hiç gönderilmez (rekor listesine eklenmez). Play Again skoru kaydetmez.
     input.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); doSubmit(); input.blur(); } });
     input.addEventListener("blur", doSubmit);
-    ovBtn.addEventListener("click", doSubmit, { once: true }); // Play Again da (doluysa) gönderir
   }
 }
 
