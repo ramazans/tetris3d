@@ -576,11 +576,6 @@ const overlay = document.getElementById("overlay");
 const ovMsg = document.getElementById("ovMsg");
 const ovBtn = document.getElementById("ovBtn");
 const ovExtra = document.getElementById("ovExtra"); // butonun ALTINDA kalan içerik (isim + rekorlar)
-// başlangıç yönergeleri cihaza göre: telefon/tablet dokunmatik, bilgisayar klavye
-const IS_TOUCH = window.matchMedia("(pointer: coarse)").matches;
-ovMsg.innerHTML = IS_TOUCH
-  ? "swipe left/right: rotate tower<br>tap: rotate piece &nbsp;•&nbsp; swipe down: drop"
-  : "← → rotate tower &nbsp;•&nbsp; ↑ rotate piece<br>↓ soft drop &nbsp;•&nbsp; Space: drop &nbsp;•&nbsp; P: pause";
 function showOverlay(msg, btn, extra){
   ovMsg.innerHTML = msg;
   ovBtn.textContent = btn;
