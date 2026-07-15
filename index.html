@@ -130,6 +130,15 @@
   #overlay .recRow.recMine .recScore,
   #overlay .recRow.recMine .recRank { color: #c02636; }
   #overlay .recEmpty { padding: 16px; color: #999; font-size: 14px; }
+  /* basit skeleton: veri gelene kadar gri çubuklar */
+  #overlay .skelBar {
+    display: inline-block; height: 11px; border-radius: 5px; vertical-align: middle;
+    background: rgba(0,0,0,.11); animation: skelPulse 1.2s ease-in-out infinite;
+  }
+  #overlay .recName .skelBar { width: 62%; }
+  #overlay .recScore .skelBar { width: 34px; }
+  @keyframes skelPulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { #overlay .skelBar { animation: none; } }
 </style>
 </head>
 <body>
@@ -245,8 +254,8 @@ function recordSkeletonRows(){
   return [0, 1, 2].map(i =>
     `<span class="recRow">` +
       `<span class="recRank">${i + 1}</span>` +
-      `<span class="recName recEmptyName">—</span>` +
-      `<span class="recScore"></span>` +
+      `<span class="recName"><span class="skelBar"></span></span>` +
+      `<span class="recScore"><span class="skelBar"></span></span>` +
       `<span class="recTime"></span>` +
     `</span>`
   ).join("");
@@ -529,11 +538,13 @@ function gameOver(){
       await submitScore(nm, finalScore, finalTime);
       loadRecords(sel.value); // kendi skorumuzu dahil ederek yenile (vurgu)
     };
-    // Gönderim yalnızca oyuncu kutuyu doldurup çıkınca / Enter'a basınca / Play Again'e basınca olur.
-    // Kutu boşsa hiç gönderilmez (rekor listesine eklenmez). Otomatik gönderim yok → ismi değiştirmek serbest.
+    // Kutu boşsa hiç gönderilmez (rekor listesine eklenmez). İsim doluysa aşağıda hemen gönderilir;
+    // ilk kez oynayan (isim boş) blur/Enter/Play Again ile gönderir.
     input.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); doSubmit(); input.blur(); } });
     input.addEventListener("blur", doSubmit);
     ovBtn.addEventListener("click", doSubmit, { once: true }); // Play Again da (doluysa) gönderir
+    // Kayıtlı isim varsa skoru oyun biter bitmez gönder (Play Again beklemeden).
+    if (savedName) doSubmit();
   }
 }
 
