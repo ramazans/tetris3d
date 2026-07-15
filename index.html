@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Cubiq</title>
+<title>Stack Spin</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧊</text></svg>">
 <style>
   html, body {
@@ -521,7 +521,7 @@ function gameOver(){
   piece = null;
   Sfx.over();
   const finalScore = score, finalTime = Math.floor(elapsed);
-  const savedName = (function(){ try { return localStorage.getItem("cubiq-name") || ""; } catch (e) { return ""; } })().slice(0, 14);
+  const savedName = (function(){ try { return localStorage.getItem("stackspin-name") || localStorage.getItem("cubiq-name") || ""; } catch (e) { return ""; } })().slice(0, 14);
 
   // ovMsg: başlık + skor kartı (butonun ÜSTÜNDE)
   const msg =
@@ -544,10 +544,10 @@ function gameOver(){
     goName = ""; goScore = finalScore; goTime = finalTime;
     const sel = document.getElementById("recSel");
     // Daha önce seçilen rekor dönemini localStorage'dan geri yükle.
-    const savedPeriod = (function(){ try { return localStorage.getItem("cubiq-period") || ""; } catch (e) { return ""; } })();
+    const savedPeriod = (function(){ try { return localStorage.getItem("stackspin-period") || localStorage.getItem("cubiq-period") || ""; } catch (e) { return ""; } })();
     if (REC_PERIODS.some(([, k]) => k === savedPeriod)) sel.value = savedPeriod;
     sel.addEventListener("change", () => {
-      try { localStorage.setItem("cubiq-period", sel.value); } catch (e) {}
+      try { localStorage.setItem("stackspin-period", sel.value); } catch (e) {}
       loadRecords(sel.value);
     });
     loadRecords(sel.value); // seçili dönemi hemen göster
@@ -561,7 +561,7 @@ function gameOver(){
       submitted = true;
       saveBtn.classList.add("hidden");
       goName = nm.slice(0, 14);
-      try { localStorage.setItem("cubiq-name", nm); } catch (e) {}
+      try { localStorage.setItem("stackspin-name", nm); } catch (e) {}
       await submitScore(nm, finalScore, finalTime);
       loadRecords(sel.value); // kendi skorumuzu dahil ederek yenile (vurgu)
     };
@@ -570,8 +570,8 @@ function gameOver(){
     input.addEventListener("input", () => {
       const nm = input.value.trim();
       try {
-        if (nm) localStorage.setItem("cubiq-name", nm);
-        else localStorage.removeItem("cubiq-name");
+        if (nm) localStorage.setItem("stackspin-name", nm);
+        else { localStorage.removeItem("stackspin-name"); localStorage.removeItem("cubiq-name"); }
       } catch (e) {}
       saveBtn.classList.toggle("hidden", submitted || !nm);
     });
