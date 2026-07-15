@@ -130,6 +130,15 @@
   #overlay .recRow.recMine .recScore,
   #overlay .recRow.recMine .recRank { color: #c02636; }
   #overlay .recEmpty { padding: 16px; color: #999; font-size: 14px; }
+  /* basit skeleton: veri gelene kadar gri çubuklar */
+  #overlay .skelBar {
+    display: inline-block; height: 11px; border-radius: 5px; vertical-align: middle;
+    background: rgba(0,0,0,.11); animation: skelPulse 1.2s ease-in-out infinite;
+  }
+  #overlay .recName .skelBar { width: 62%; }
+  #overlay .recScore .skelBar { width: 34px; }
+  @keyframes skelPulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { #overlay .skelBar { animation: none; } }
 </style>
 </head>
 <body>
@@ -245,8 +254,8 @@ function recordSkeletonRows(){
   return [0, 1, 2].map(i =>
     `<span class="recRow">` +
       `<span class="recRank">${i + 1}</span>` +
-      `<span class="recName recEmptyName">—</span>` +
-      `<span class="recScore"></span>` +
+      `<span class="recName"><span class="skelBar"></span></span>` +
+      `<span class="recScore"><span class="skelBar"></span></span>` +
       `<span class="recTime"></span>` +
     `</span>`
   ).join("");
@@ -531,8 +540,9 @@ function gameOver(){
     };
     input.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); doSubmit(); input.blur(); } });
     input.addEventListener("blur", doSubmit);
-    // İsim daha önce kaydedilmişse (localStorage) skoru doğrudan otomatik gönder.
+    // İsim daha önce kaydedilmişse (localStorage) skoru oyun biter bitmez otomatik gönder.
     // İsim yoksa gönderim yalnızca oyuncu kutuyu doldurup Enter'a basınca / kutudan çıkınca olur.
+    // Play Again skoru kaydetmez.
     if (savedName) doSubmit();
   }
 }
