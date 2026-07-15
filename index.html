@@ -78,6 +78,10 @@
   }
   #overlay button:active { transform: translateY(4px); box-shadow: 0 2px 0 #9c141e; }
   #overlay #ovBtn { margin: 30px 0; }
+  /* start ekranı silüeti: silindir blok-kule (yalnızca açılışta görünür) */
+  #overlay #ovLogo { width: clamp(190px, 44vw, 280px); margin: 2px 0 -8px; pointer-events: none; }
+  #overlay #ovLogo svg { display: block; width: 100%; height: auto; }
+  #overlay #ovLogo.hidden { display: none; }
   #overlay #ovExtra { display: flex; flex-direction: column; align-items: center; width: 100%; }
 
   #overlay .ovName {
@@ -166,6 +170,7 @@
 </div>
 <div id="overlay">
   <p id="ovMsg"></p>
+  <div id="ovLogo" aria-hidden="true"></div>
   <button id="ovBtn">Start</button>
   <div id="ovExtra"></div>
 </div>
@@ -595,13 +600,59 @@ const overlay = document.getElementById("overlay");
 const ovMsg = document.getElementById("ovMsg");
 const ovBtn = document.getElementById("ovBtn");
 const ovExtra = document.getElementById("ovExtra"); // butonun ALTINDA kalan içerik (isim + rekorlar)
+const ovLogo = document.getElementById("ovLogo");   // butonun ÜSTÜNDE kalan silüet (yalnızca açılış ekranı)
 function showOverlay(msg, btn, extra){
   ovMsg.innerHTML = msg;
   ovBtn.textContent = btn;
   ovExtra.innerHTML = extra || "";
+  if (ovLogo) ovLogo.classList.add("hidden"); // pause/game-over ekranlarında silüet gösterilmez
   overlay.classList.remove("hidden");
 }
 function hideOverlay(){ overlay.classList.add("hidden"); }
+
+// Açılış ekranı silüeti: oyunun silindirik blok-kulesini çağrıştıran dekoratif SVG.
+// Statik/deterministik; PIECES paleti ve shade() ile oyunla aynı görünümde üretilir.
+function buildStartLogo(){
+  if (!ovLogo) return;
+  const PAL = Object.values(PIECES).map(p => p.color); // [I,O,T,S,Z,L,J]
+  const W = 300, H = 250, COLS = 9, span = 156 * Math.PI / 180;
+  const RX = 120, RYd = 28, BH = 20, DX = 9, DY = 6;
+  const cx = W / 2, baseY0 = H - 34;
+  const heights = [4, 6, 5, 8, 6, 7, 5, 6, 4];
+  const colorMap = [
+    [1,4,6,0], [4,6,2,2,3,1], [6,3,4,2,6], [1,4,3,6,2,2,5,0], [3,6,4,2,1,5],
+    [4,2,6,3,5,1,0], [6,3,1,4,5], [2,4,6,3,1,5], [5,1,4,3],
+  ];
+  const r2 = n => Math.round(n * 100) / 100;
+  const cube = (x, y, w, h, dx, dy, color) => {
+    const edge = shade(color, 0.55), top = shade(color, 1.28), side = shade(color, 0.72);
+    return `<g stroke="${edge}" stroke-width="1" stroke-linejoin="round">` +
+      `<path d="M${r2(x)},${r2(y)} L${r2(x+w)},${r2(y)} L${r2(x+w+dx)},${r2(y-dy)} L${r2(x+dx)},${r2(y-dy)} Z" fill="${top}"/>` +
+      `<path d="M${r2(x+w)},${r2(y)} L${r2(x+w+dx)},${r2(y-dy)} L${r2(x+w+dx)},${r2(y-dy+h)} L${r2(x+w)},${r2(y+h)} Z" fill="${side}"/>` +
+      `<rect x="${r2(x)}" y="${r2(y)}" width="${r2(w)}" height="${r2(h)}" fill="${color}"/></g>`;
+  };
+  // sütunları merkez en sona gelecek şekilde sırala (painter): kenarlar önce, orta üstte
+  const order = [];
+  for (let c = 0; c < COLS; c++) order.push(c);
+  order.sort((a, b) => Math.abs(a - (COLS-1)/2) < Math.abs(b - (COLS-1)/2) ? 1 : -1);
+  let parts = "";
+  for (const c of order){
+    const t = (c - (COLS-1)/2) / (COLS-1), a = t * span;
+    const x = cx + RX * Math.sin(a);
+    const w = (RX * span / COLS) * Math.cos(a) * 1.22; // kenarlarda daralır; solid duvar için hafif bindirme
+    if (w < 3) continue;
+    const baseY = baseY0 - RYd * (1 - Math.cos(a)), ca = Math.cos(a);
+    const h = heights[c];
+    for (let j = 0; j < h; j++){
+      const idx = (colorMap[c] && colorMap[c][j] != null) ? colorMap[c][j] : (c*3 + j) % PAL.length;
+      parts += cube(x - w/2, baseY - (j+1)*BH, w, BH, DX*ca, DY*ca, PAL[idx]);
+    }
+  }
+  const base = `<ellipse cx="${cx}" cy="${baseY0+4}" rx="${RX*0.98}" ry="${RYd}" fill="rgba(0,0,0,.05)"/>`;
+  const ring = `<ellipse cx="${cx}" cy="24" rx="${RX*0.72}" ry="${RYd*0.7}" fill="none" stroke="rgba(214,64,78,.55)" stroke-width="2"/>`;
+  ovLogo.innerHTML = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" fill="none">${base}${parts}${ring}</svg>`;
+}
+buildStartLogo();
 ovBtn.addEventListener("click", () => {
   Sfx.unlock();
   if (state === "paused"){ state = "playing"; hideOverlay(); }
