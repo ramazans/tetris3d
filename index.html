@@ -529,10 +529,11 @@ function gameOver(){
       await submitScore(nm, finalScore, finalTime);
       loadRecords(sel.value); // kendi skorumuzu dahil ederek yenile (vurgu)
     };
-    // Gönderim yalnızca oyuncu kutuyu doldurup çıkınca / Enter'a basınca olur.
-    // Kutu boşsa hiç gönderilmez (rekor listesine eklenmez). Play Again skoru kaydetmez.
     input.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); doSubmit(); input.blur(); } });
     input.addEventListener("blur", doSubmit);
+    // İsim daha önce kaydedilmişse (localStorage) skoru doğrudan otomatik gönder.
+    // İsim yoksa gönderim yalnızca oyuncu kutuyu doldurup Enter'a basınca / kutudan çıkınca olur.
+    if (savedName) doSubmit();
   }
 }
 
