@@ -231,7 +231,7 @@ async function submitScore(name, sc, timeSec){
     const res = await fetch(SUPA_URL + "/rest/v1/scores", {
       method: "POST",
       headers: supaHeaders({ "Content-Type": "application/json", Prefer: "return=minimal" }),
-      body: JSON.stringify({ name: name.slice(0, 16), score: sc, time_seconds: timeSec }),
+      body: JSON.stringify({ name: name.slice(0, 14), score: sc, time_seconds: timeSec }),
     });
     return res.ok;
   } catch (e) { return false; }
@@ -517,7 +517,7 @@ function gameOver(){
   piece = null;
   Sfx.over();
   const finalScore = score, finalTime = Math.floor(elapsed);
-  const savedName = (function(){ try { return localStorage.getItem("cubiq-name") || ""; } catch (e) { return ""; } })().slice(0, 16);
+  const savedName = (function(){ try { return localStorage.getItem("cubiq-name") || ""; } catch (e) { return ""; } })().slice(0, 14);
 
   // ovMsg: başlık + skor kartı (butonun ÜSTÜNDE)
   const msg =
@@ -529,7 +529,7 @@ function gameOver(){
   // ovExtra: isim kutusu + rekorlar (butonun ALTINDA)
   const extra = SUPA_ON
     ? `<span class="ovName"><span class="ovNameWrap">` +
-        `<input id="ovNameInput" maxlength="16" placeholder="Your name" value="${escapeHtml(savedName)}" autocomplete="off">` +
+        `<input id="ovNameInput" maxlength="14" placeholder="Your name" value="${escapeHtml(savedName)}" autocomplete="off">` +
         `<button id="ovNameSave" class="nameSave hidden" title="Save score" aria-label="Save score">✓</button>` +
       `</span></span>` +
       recordsCardHtml()
@@ -556,7 +556,7 @@ function gameOver(){
       if (submitted || !nm) return;
       submitted = true;
       saveBtn.classList.add("hidden");
-      goName = nm.slice(0, 16);
+      goName = nm.slice(0, 14);
       try { localStorage.setItem("cubiq-name", nm); } catch (e) {}
       await submitScore(nm, finalScore, finalTime);
       loadRecords(sel.value); // kendi skorumuzu dahil ederek yenile (vurgu)
