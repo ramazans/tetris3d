@@ -538,6 +538,14 @@ function gameOver(){
       await submitScore(nm, finalScore, finalTime);
       loadRecords(sel.value); // kendi skorumuzu dahil ederek yenile (vurgu)
     };
+    // Oyuncu ismi değiştirdikçe localStorage'ı güncelle → bir sonraki oyun bu isimle kaydeder.
+    input.addEventListener("input", () => {
+      const nm = input.value.trim();
+      try {
+        if (nm) localStorage.setItem("cubiq-name", nm);
+        else localStorage.removeItem("cubiq-name");
+      } catch (e) {}
+    });
     input.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); doSubmit(); input.blur(); } });
     input.addEventListener("blur", doSubmit);
     // İsim daha önce kaydedilmişse (localStorage) skoru oyun biter bitmez otomatik gönder.
