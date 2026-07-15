@@ -611,7 +611,7 @@ ovBtn.addEventListener("click", () => {
 function togglePause(){
   if (state === "playing"){
     state = "paused";
-    showOverlay("Paused", "Resume");
+    showOverlay("", "Resume");
   } else if (state === "paused"){
     state = "playing"; hideOverlay();
   }
