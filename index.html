@@ -93,6 +93,19 @@
   }
   #overlay .ovName input:focus { border-color: #d6404e; }
   #overlay .ovName input::placeholder { color: #b7b7bd; font-weight: normal; }
+  /* kutunun sağında küçük kaydet ikonu; absolute olduğu için kutunun hizasını bozmaz */
+  #overlay .ovNameWrap { position: relative; display: inline-block; }
+  #overlay .nameSave {
+    position: absolute; left: 100%; top: 50%; transform: translateY(-50%);
+    margin-left: 8px; width: 34px; height: 34px; padding: 0;
+    border: none; border-radius: 50%; cursor: pointer;
+    background: linear-gradient(180deg, #f04a55, #d41f2c);
+    box-shadow: 0 3px 0 #9c141e, 0 5px 9px rgba(0,0,0,.18);
+    color: #fff; font-size: 17px; font-weight: bold; line-height: 34px; text-align: center;
+    transition: transform .08s;
+  }
+  #overlay .nameSave:active { transform: translateY(calc(-50% + 2px)); box-shadow: 0 1px 0 #9c141e; }
+  #overlay .nameSave.hidden { display: none; }
   #overlay .ovRecords {
     display: flex; flex-direction: column; width: 320px; max-width: 86vw; margin-bottom: 20px;
     border-radius: 16px; overflow: hidden;
@@ -515,8 +528,10 @@ function gameOver(){
     `</span>`;
   // ovExtra: isim kutusu + rekorlar (butonun ALTINDA)
   const extra = SUPA_ON
-    ? `<span class="ovName">` +
-        `<input id="ovNameInput" maxlength="16" placeholder="Your name" value="${escapeHtml(savedName)}" autocomplete="off"></span>` +
+    ? `<span class="ovName"><span class="ovNameWrap">` +
+        `<input id="ovNameInput" maxlength="16" placeholder="Your name" value="${escapeHtml(savedName)}" autocomplete="off">` +
+        `<button id="ovNameSave" class="nameSave hidden" title="Save score" aria-label="Save score">✓</button>` +
+      `</span></span>` +
       recordsCardHtml()
     : "";
   showOverlay(msg, "Play Again", extra);
@@ -534,28 +549,32 @@ function gameOver(){
     loadRecords(sel.value); // seçili dönemi hemen göster
 
     const input = document.getElementById("ovNameInput");
+    const saveBtn = document.getElementById("ovNameSave");
     let submitted = false;
     const doSubmit = async () => {
       const nm = input.value.trim();
       if (submitted || !nm) return;
       submitted = true;
+      saveBtn.classList.add("hidden");
       goName = nm.slice(0, 16);
       try { localStorage.setItem("cubiq-name", nm); } catch (e) {}
       await submitScore(nm, finalScore, finalTime);
       loadRecords(sel.value); // kendi skorumuzu dahil ederek yenile (vurgu)
     };
     // Oyuncu ismi değiştirdikçe localStorage'ı güncelle → bir sonraki oyun bu isimle kaydeder.
+    // Skor henüz gönderilmediyse kutunun yanında ✓ (kaydet) butonunu göster.
     input.addEventListener("input", () => {
       const nm = input.value.trim();
       try {
         if (nm) localStorage.setItem("cubiq-name", nm);
         else localStorage.removeItem("cubiq-name");
       } catch (e) {}
+      saveBtn.classList.toggle("hidden", submitted || !nm);
     });
     input.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); doSubmit(); input.blur(); } });
-    input.addEventListener("blur", doSubmit);
+    saveBtn.addEventListener("click", doSubmit);
     // İsim daha önce kaydedilmişse (localStorage) skoru oyun biter bitmez otomatik gönder.
-    // İsim yoksa gönderim yalnızca oyuncu kutuyu doldurup Enter'a basınca / kutudan çıkınca olur.
+    // İlk kez oynayan / ismini henüz girmemiş oyuncu: isim yazınca beliren ✓ butonu (veya Enter) ile kaydeder.
     // Play Again skoru kaydetmez.
     if (savedName) doSubmit();
   }
