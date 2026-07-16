@@ -781,6 +781,43 @@ function poly(pts){
   ctx2d.closePath();
 }
 
+// bir çokgeni merkeze doğru d piksel içeri çeker (yuvarlatma öncesi pay)
+function insetPts(pts, d){
+  let cx = 0, cy = 0;
+  for (const p of pts){ cx += p[0]; cy += p[1]; }
+  cx /= pts.length; cy /= pts.length;
+  return pts.map(p => {
+    const dx = cx - p[0], dy = cy - p[1], L = Math.hypot(dx, dy) || 1;
+    return [p[0] + dx/L*d, p[1] + dy/L*d];
+  });
+}
+
+// köşeleri r yarıçapla yuvarlatılmış çokgen yolu (küp köşe radius'u)
+function roundPolyPath(pts, r){
+  const n = pts.length;
+  const d = (a, b) => Math.hypot(a[0]-b[0], a[1]-b[1]);
+  const towards = (a, b, t) => [a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t];
+  ctx2d.beginPath();
+  for (let i = 0; i < n; i++){
+    const a = pts[(i-1+n)%n], b = pts[i], c = pts[(i+1)%n];
+    const rab = Math.min(r, d(a,b)*0.5), rbc = Math.min(r, d(b,c)*0.5);
+    const p1 = towards(b, a, d(a,b) ? rab/d(a,b) : 0); // b'den a yönüne
+    const p2 = towards(b, c, d(b,c) ? rbc/d(b,c) : 0); // b'den c yönüne
+    if (i === 0) ctx2d.moveTo(p1[0], p1[1]); else ctx2d.lineTo(p1[0], p1[1]);
+    ctx2d.quadraticCurveTo(b[0], b[1], p2[0], p2[1]); // köşede yumuşak kavis
+  }
+  ctx2d.closePath();
+}
+
+function bbox(pts){
+  let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+  for (const p of pts){
+    if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0];
+    if (p[1] < miny) miny = p[1]; if (p[1] > maxy) maxy = p[1];
+  }
+  return { minx, miny, maxx, maxy, w: maxx-minx, h: maxy-miny };
+}
+
 const LIGHT = (() => { const l = [-0.45, 0.75, -0.5]; const n = Math.hypot(...l); return l.map(v => v/n); })();
 
 // dışa bakan birim normali kamera uzayına çevir (yalnızca rotasyon, öteleme yok)
@@ -842,12 +879,17 @@ function drawCell(colCont, row, color, { alpha = 1, bright = 1, outline = true, 
   const fog = clamp((cc[2] - (CAM_DIST - R_OUT)) / (2*R_OUT), 0, 1) * 0.55;
 
   const toScr = p => { const c = camSpace(p[0], p[1], p[2]); return [OFFX + c[0]/c[2]*SCALE, OFFY - c[1]/c[2]*SCALE]; };
+  const wCentroid = q => [(q[0][0]+q[1][0]+q[2][0]+q[3][0])/4,
+                         (q[0][1]+q[1][1]+q[2][1]+q[3][1])/4,
+                         (q[0][2]+q[1][2]+q[2][2]+q[3][2])/4];
   // yarı saydam hücrede (hayalet) alt-dörtgen dikişleri koyu çizgi olarak görünür;
   // bu yüzden yüz grubu tek parça (sınır yolu) olarak, tek renkle doldurulur
   const translucent = alpha < 0.999;
-  const fills = [], borders = [];
+  const faces = [], ghostFills = [], borders = [];
   for (const g of groups){
-    let any = false, groupFill = null;
+    // görünen alt-dörtgenlerden ışık örnekleri topla (yüzey eğriliği için kademeli gölge)
+    const samples = [];
+    let kSum = 0, diffMax = 0;
     for (const q of g.quads){
       const cam = q.pts.map(p => camSpace(p[0], p[1], p[2]));
       const n = rotN(q.n);
@@ -855,39 +897,96 @@ function drawCell(colCont, row, color, { alpha = 1, bright = 1, outline = true, 
       const cy = (cam[0][1]+cam[1][1]+cam[2][1]+cam[3][1])/4;
       const cz = (cam[0][2]+cam[1][2]+cam[2][2]+cam[3][2])/4;
       if (n[0]*cx + n[1]*cy + n[2]*cz >= 0) continue; // arkaya bakan alt-yüzey
-      any = true;
       const diff = Math.max(0, n[0]*LIGHT[0] + n[1]*LIGHT[1] + n[2]*LIGHT[2]);
-      const fill = shadeFog(color, (0.78 + 0.45*diff)*bright, fog);
-      groupFill = fill;
-      if (!translucent){
-        fills.push({ pts: cam.map(c => [OFFX + c[0]/c[2]*SCALE, OFFY - c[1]/c[2]*SCALE]), fill, seal: true });
-      }
+      const kBase = (0.74 + 0.52*diff) * bright;
+      samples.push({ kBase, diff, scr: toScr(wCentroid(q.pts)) });
+      kSum += kBase; diffMax = Math.max(diffMax, diff);
     }
-    if (any){
-      if (translucent) fills.push({ pts: g.border.map(toScr), fill: groupFill, seal: false });
-      borders.push(g.border.map(toScr));
-    } else if (translucent){
-      // saydam hücrede arkada kalan kenar/köşe izleri de görünsün
-      borders.push(g.border.map(toScr));
+    const borderScr = g.border.map(toScr);
+    if (!samples.length){
+      if (translucent) borders.push(borderScr); // arkada kalan iz
+      continue;
+    }
+    const kAvg = kSum / samples.length;
+    borders.push(borderScr);
+    if (translucent){
+      ghostFills.push({ pts: borderScr, fill: shadeFog(color, kAvg, fog) });
+    } else {
+      faces.push({ pts: borderScr, samples, kAvg, diffMax });
     }
   }
 
   ctx2d.globalAlpha = alpha;
   ctx2d.lineJoin = "round";
-  for (const f of fills){ // önce tüm dolgular (dikişler kendi rengiyle kapatılır)
-    poly(f.pts);
-    ctx2d.fillStyle = f.fill;
+
+  if (translucent){
+    for (const f of ghostFills){
+      poly(f.pts);
+      ctx2d.fillStyle = f.fill;
+      ctx2d.fill();
+    }
+    if (outline){
+      ctx2d.strokeStyle = shadeFog(color, 0.6, fog);
+      ctx2d.lineWidth = OUTLINE_W;
+      for (const b of borders){ poly(b); ctx2d.stroke(); }
+    }
+    ctx2d.globalAlpha = 1;
+    return;
+  }
+
+  // opak hücre: yuvarlatılmış, gradyanlı yüzler + yumuşak parlaklık
+  for (const f of faces){
+    const bb = bbox(f.pts);
+    const minSide = Math.min(bb.w, bb.h);
+    const rad = clamp(minSide * 0.20, 1.5, minSide * 0.5); // köşe radius'u
+    const inset = clamp(minSide * 0.09, 0.6, rad);
+
+    // 1) yuvarlatılmış koyu taban: küpün silüetini oluşturur + içteki yüzle arasında yumuşak boşluk/AO bırakır
+    roundPolyPath(f.pts, rad);
+    ctx2d.fillStyle = shadeFog(color, f.kAvg * 0.7, fog);
     ctx2d.fill();
-    if (f.seal){
-      ctx2d.strokeStyle = f.fill;
-      ctx2d.lineWidth = 1;
-      ctx2d.stroke();
+
+    // 2) yuvarlatılmış, içeri çekilmiş yüz + yüzey eğriliğine göre gradyan
+    const face = insetPts(f.pts, inset);
+    const s0 = f.samples[0], s1 = f.samples[f.samples.length - 1];
+    let g;
+    if (f.samples.length > 1 && Math.hypot(s1.scr[0]-s0.scr[0], s1.scr[1]-s0.scr[1]) > 1){
+      // eğri yüz (dış/iç): örnekler arası gerçek ışık gradyanı
+      g = ctx2d.createLinearGradient(s0.scr[0], s0.scr[1], s1.scr[0], s1.scr[1]);
+      g.addColorStop(0, shadeFog(color, s0.kBase + 0.06, fog));
+      g.addColorStop(1, shadeFog(color, s1.kBase + 0.06, fog));
+    } else {
+      // düz yüz: hafif dikey yumuşak form (üst aydınlık, alt gölge)
+      g = ctx2d.createLinearGradient(bb.minx, bb.miny, bb.minx, bb.maxy);
+      g.addColorStop(0, shadeFog(color, f.kAvg + 0.14, fog));
+      g.addColorStop(1, shadeFog(color, Math.max(0.1, f.kAvg - 0.06), fog));
+    }
+    roundPolyPath(face, rad);
+    ctx2d.fillStyle = g;
+    ctx2d.fill();
+
+    // 3) parlaklık (specular): ışığa dönük yüzlerde üstten yumuşak beyaz kaçış
+    if (f.diffMax > 0.45){
+      const gloss = clamp((f.diffMax - 0.45) * 0.9, 0, 0.4);
+      const hg = ctx2d.createLinearGradient(bb.minx, bb.miny, bb.minx, bb.miny + bb.h * 0.7);
+      hg.addColorStop(0, `rgba(255,255,255,${gloss})`);
+      hg.addColorStop(1, "rgba(255,255,255,0)");
+      roundPolyPath(face, rad);
+      ctx2d.fillStyle = hg;
+      ctx2d.fill();
     }
   }
-  if (outline){ // sonra hücre sınırı konturları: rengin koyu tonu (siyah değil), siste soluklaşır
-    ctx2d.strokeStyle = shadeFog(color, 0.6, fog);
+
+  // hücre sınırı: rengin koyu tonu (siyah değil), yuvarlatılmış — küpler arası yumuşak ayrım
+  if (outline){
+    ctx2d.strokeStyle = shadeFog(color, 0.58, fog);
     ctx2d.lineWidth = OUTLINE_W;
-    for (const b of borders){ poly(b); ctx2d.stroke(); }
+    for (const f of faces){
+      const bb = bbox(f.pts);
+      const rad = clamp(Math.min(bb.w, bb.h) * 0.20, 1.5, Math.min(bb.w, bb.h) * 0.5);
+      roundPolyPath(f.pts, rad);
+      ctx2d.stroke();
+    }
   }
   ctx2d.globalAlpha = 1;
 }
