@@ -1,0 +1,276 @@
+<title>Soft-3D Tetris Cube — CSS Component</title>
+<style>
+  /* ============================================================
+     THE COMPONENT  —  a single premium soft-3D Tetris cube.
+     Pure CSS. Configure with two variables:
+        --cube-color : any CSS color   (default amber)
+        --cube-size  : any CSS length  (default 160px)
+     All shading is derived from --cube-color, so one variable
+     re-themes the whole block while keeping the studio lighting.
+     ============================================================ */
+  .cube {
+    --cube-color: #f4c04e;
+    --cube-size: 160px;
+
+    /* derived studio tones — vibrant base, soft tints & shades */
+    --c-hi:    color-mix(in oklab, var(--cube-color), white 46%);
+    --c-hi-2:  color-mix(in oklab, var(--cube-color), white 24%);
+    --c-lo:    color-mix(in oklab, var(--cube-color), black 20%);
+    --c-lo-2:  color-mix(in oklab, var(--cube-color), black 34%);
+    --r: clamp(6px, calc(var(--cube-size) * 0.10), 34px);
+
+    box-sizing: border-box;
+    width: var(--cube-size);
+    height: var(--cube-size);
+    border-radius: var(--r);
+    position: relative;
+    isolation: isolate;
+
+    /* front face: gentle vertical gradient + top-left ambient wash
+       + bottom-right fall-off, layered so the block reads inflated */
+    background:
+      radial-gradient(115% 120% at 30% 24%,
+        var(--c-hi) 0%, transparent 44%),
+      radial-gradient(120% 125% at 78% 86%,
+        var(--c-lo-2) 0%, transparent 50%),
+      linear-gradient(162deg,
+        var(--c-hi-2) 0%, var(--cube-color) 44%, var(--c-lo) 100%);
+
+    box-shadow:
+      /* soft outer shadow underneath — no hard edge */
+      0 calc(var(--cube-size) * 0.055) calc(var(--cube-size) * 0.09)
+        calc(var(--cube-size) * -0.02) rgba(24, 26, 33, 0.30),
+      0 calc(var(--cube-size) * 0.11) calc(var(--cube-size) * 0.16)
+        calc(var(--cube-size) * -0.05) rgba(24, 26, 33, 0.22),
+      /* bevel: soft light rim, top-left */
+      inset calc(var(--cube-size) * 0.035) calc(var(--cube-size) * 0.04)
+        calc(var(--cube-size) * 0.06) rgba(255, 255, 255, 0.55),
+      /* bevel: soft dark rim, bottom-right */
+      inset calc(var(--cube-size) * -0.045) calc(var(--cube-size) * -0.05)
+        calc(var(--cube-size) * 0.08) rgba(17, 12, 4, 0.24),
+      /* very soft inner shadow for depth (the "pillow" cushion) */
+      inset 0 0 calc(var(--cube-size) * 0.16) rgba(17, 12, 4, 0.10);
+  }
+
+  /* broad, matte ambient sheen — soft, never a sharp reflection */
+  .cube::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(90% 75% at 34% 20%,
+      rgba(255, 255, 255, 0.34) 0%,
+      rgba(255, 255, 255, 0.10) 34%,
+      transparent 62%);
+    mix-blend-mode: screen;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* inner rim light — thin, soft, sells the inflated edge */
+  .cube::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow:
+      inset 0 calc(var(--cube-size) * 0.012) 0 rgba(255, 255, 255, 0.30),
+      inset 0 calc(var(--cube-size) * -0.012) calc(var(--cube-size) * 0.02)
+        rgba(17, 12, 4, 0.14);
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* ============================================================
+     SHOWCASE  —  everything below just presents the component.
+     ============================================================ */
+  :root {
+    --bg: #eceef2;
+    --panel: #f7f8faee;
+    --ink: #1b1e26;
+    --muted: #626775;
+    --line: #d9dce3;
+    --accent: #4f6bd8;
+    --code-bg: #f2f3f6;
+    --stage-1: #f3f4f7;
+    --stage-2: #dfe2e9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181d;
+      --panel: #1e2128e6;
+      --ink: #e8eaf0;
+      --muted: #9aa0ad;
+      --line: #2c303a;
+      --accent: #8ea2f2;
+      --code-bg: #14161b;
+      --stage-1: #23262e;
+      --stage-2: #14151a;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #eceef2; --panel: #f7f8faee; --ink: #1b1e26; --muted: #626775;
+    --line: #d9dce3; --accent: #4f6bd8; --code-bg: #f2f3f6;
+    --stage-1: #f3f4f7; --stage-2: #dfe2e9;
+  }
+  :root[data-theme="dark"] {
+    --bg: #16181d; --panel: #1e2128e6; --ink: #e8eaf0; --muted: #9aa0ad;
+    --line: #2c303a; --accent: #8ea2f2; --code-bg: #14161b;
+    --stage-1: #23262e; --stage-2: #14151a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI",
+      Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    justify-content: center;
+    padding: clamp(20px, 5vw, 64px) 20px;
+  }
+  .wrap { width: 100%; max-width: 860px; display: flex; flex-direction: column; gap: 40px; }
+
+  header { display: flex; flex-direction: column; gap: 10px; }
+  .eyebrow {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); margin: 0;
+  }
+  h1 {
+    margin: 0; font-size: clamp(26px, 4.4vw, 40px); font-weight: 700;
+    letter-spacing: -0.02em; text-wrap: balance;
+  }
+  .lede { margin: 0; color: var(--muted); max-width: 60ch; font-size: 15.5px; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: clamp(22px, 4vw, 36px);
+    display: flex; flex-direction: column; gap: 22px;
+  }
+  .card > .head { display: flex; flex-direction: column; gap: 4px; }
+  .card h2 {
+    margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .card .note { margin: 0; font-size: 14px; color: var(--muted); }
+
+  /* studio stage for the hero cube */
+  .stage {
+    border-radius: 14px;
+    background:
+      radial-gradient(120% 90% at 50% 18%, var(--stage-1) 0%, var(--stage-2) 100%);
+    display: flex; align-items: center; justify-content: center;
+    padding: clamp(36px, 7vw, 72px);
+  }
+  .hero-cube { --cube-size: clamp(120px, 30vw, 200px); }
+
+  .row {
+    display: flex; flex-wrap: wrap; gap: clamp(18px, 4vw, 34px);
+    align-items: flex-end; justify-content: center;
+  }
+  .swatch { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .swatch .name {
+    font-size: 12px; letter-spacing: 0.06em; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* spec / usage */
+  pre {
+    margin: 0; overflow-x: auto; background: var(--code-bg);
+    border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px 20px; font-size: 13px; line-height: 1.6;
+    font-family: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    color: var(--ink);
+  }
+  .tokens { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .token {
+    border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
+    display: flex; flex-direction: column; gap: 3px; background: var(--code-bg);
+  }
+  .token code {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px; font-weight: 600; color: var(--accent);
+  }
+  .token span { font-size: 13px; color: var(--muted); }
+
+  footer { color: var(--muted); font-size: 13px; text-align: center; }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">CSS Component</p>
+    <h1>Soft-3D Tetris Cube</h1>
+    <p class="lede">A single vibrant block with a matte, slightly inflated “pillow”
+      finish and studio lighting — no images, SVG, or canvas. Re-theme it by changing
+      one variable.</p>
+  </header>
+
+  <section class="card">
+    <div class="head">
+      <h2>Studio render</h2>
+      <p class="note">Top-left catches soft ambient light; bottom-right falls into shadow.</p>
+    </div>
+    <div class="stage">
+      <div class="cube hero-cube" style="--cube-color:#f4c04e"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head">
+      <h2>One variable, any color</h2>
+      <p class="note">Shading is derived from <code>--cube-color</code>, so hues stay vibrant and realistically lit.</p>
+    </div>
+    <div class="row">
+      <div class="swatch"><div class="cube" style="--cube-color:#e8503a"></div><span class="name">#e8503a</span></div>
+      <div class="swatch"><div class="cube" style="--cube-color:#f4c04e"></div><span class="name">#f4c04e</span></div>
+      <div class="swatch"><div class="cube" style="--cube-color:#57c47a"></div><span class="name">#57c47a</span></div>
+      <div class="swatch"><div class="cube" style="--cube-color:#3aa6e8"></div><span class="name">#3aa6e8</span></div>
+      <div class="swatch"><div class="cube" style="--cube-color:#8a6cf0"></div><span class="name">#8a6cf0</span></div>
+      <div class="swatch"><div class="cube" style="--cube-color:#ef73b8"></div><span class="name">#ef73b8</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head">
+      <h2>One variable, any size</h2>
+      <p class="note">Every shadow, bevel, and radius scales with <code>--cube-size</code>.</p>
+    </div>
+    <div class="row">
+      <div class="swatch"><div class="cube" style="--cube-color:#3aa6e8;--cube-size:64px"></div><span class="name">64px</span></div>
+      <div class="swatch"><div class="cube" style="--cube-color:#3aa6e8;--cube-size:96px"></div><span class="name">96px</span></div>
+      <div class="swatch"><div class="cube" style="--cube-color:#3aa6e8;--cube-size:132px"></div><span class="name">132px</span></div>
+      <div class="swatch"><div class="cube" style="--cube-color:#3aa6e8;--cube-size:172px"></div><span class="name">172px</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head">
+      <h2>Usage</h2>
+      <p class="note">Drop in the markup, set two variables. That’s the whole API.</p>
+    </div>
+    <div class="tokens">
+      <div class="token"><code>--cube-color</code><span>Base hue. Tints & shades are auto-derived.</span></div>
+      <div class="token"><code>--cube-size</code><span>Any length. Radius, bevel & shadow scale with it.</span></div>
+    </div>
+    <pre>&lt;div class="cube" style="--cube-color:#57c47a; --cube-size:120px"&gt;&lt;/div&gt;</pre>
+  </section>
+
+  <footer>Pure CSS · matte finish · soft bevel · pillow depth · configurable via two custom properties</footer>
+</div>
+
+<script>
+  // keep the OS/user theme in sync so both palettes get exercised
+  (function () {
+    var mq = window.matchMedia('(prefers-color-scheme: dark)');
+    function apply() {
+      if (!document.documentElement.hasAttribute('data-theme')) return;
+    }
+    mq.addEventListener && mq.addEventListener('change', apply);
+  })();
+</script>
