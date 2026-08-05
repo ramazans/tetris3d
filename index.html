@@ -945,7 +945,7 @@ const BASE_SLOT_COLOR = "#b6b8be";
 // hayalet (gölge) parça da renksiz: sadece konumu göstersin
 const GHOST_COLOR = "#a5a8ae";
 function drawBaseSlots(){
-  ctx2d.globalAlpha = 0.40;
+  ctx2d.globalAlpha = 0.22;
   for (let c = 0; c < COLS; c++){
     const a0 = c*DELTA + towerAngle, a1 = a0 + DELTA;
     ctx2d.beginPath();
@@ -1045,7 +1045,7 @@ function render(now){
     const gRow = dropRow();
     if (gRow < piece.row){
       for (const [dc, dr] of piece.cells){
-        pushCell(piece.visCol + dc, gRow + dr, GHOST_COLOR, { alpha: 0.42, outline: true, skip: skipFor(dc, dr) });
+        pushCell(piece.visCol + dc, gRow + dr, GHOST_COLOR, { alpha: 0.24, outline: true, skip: skipFor(dc, dr) });
       }
     }
     // düşen parça
