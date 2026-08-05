@@ -586,7 +586,6 @@ function gameOver(){
 
 function restart(){
   grid = emptyGrid();
-  randomizeBaseColors();
   bag = []; nextKey = null; score = 0; rings = 0; elapsed = 0;
   clearing = null; softDrop = false;
   state = "playing";
@@ -941,12 +940,10 @@ function drawGuideRing(y, strokeStyle, alpha, lineWidth = 1){
   ctx2d.globalAlpha = 1;
 }
 
-// taban dilimleri: taş paletinden rastgele renklerle içi dolu (her oyunda yeniden karılır)
-let baseColors = [];
-function randomizeBaseColors(){
-  const pal = Object.values(PIECES).map(p => p.color);
-  baseColors = Array.from({ length: COLS }, () => pal[Math.floor(Math.random()*pal.length)]);
-}
+// taban dilimleri: nötr gri, renksiz (taş renkleriyle karışmasın)
+const BASE_SLOT_COLOR = "#b6b8be";
+// hayalet (gölge) parça da renksiz: sadece konumu göstersin
+const GHOST_COLOR = "#a5a8ae";
 function drawBaseSlots(){
   ctx2d.globalAlpha = 0.40;
   for (let c = 0; c < COLS; c++){
@@ -963,7 +960,7 @@ function drawBaseSlots(){
       ctx2d.lineTo(px, py);
     }
     ctx2d.closePath();
-    ctx2d.fillStyle = baseColors[c];
+    ctx2d.fillStyle = BASE_SLOT_COLOR;
     ctx2d.fill();
   }
   ctx2d.globalAlpha = 1;
@@ -1044,11 +1041,11 @@ function render(now){
       top: cellSet.has(dc + "," + (dr+1)),
       bottom: cellSet.has(dc + "," + (dr-1)),
     });
-    // gölge (hayalet): ineceği yer belirgin görünsün
+    // gölge (hayalet): ineceği yer belirgin görünsün — renksiz, nötr gri
     const gRow = dropRow();
     if (gRow < piece.row){
       for (const [dc, dr] of piece.cells){
-        pushCell(piece.visCol + dc, gRow + dr, piece.color, { alpha: 0.42, outline: true, skip: skipFor(dc, dr) });
+        pushCell(piece.visCol + dc, gRow + dr, GHOST_COLOR, { alpha: 0.42, outline: true, skip: skipFor(dc, dr) });
       }
     }
     // düşen parça
@@ -1110,7 +1107,6 @@ function frame(t){
 }
 
 grid = emptyGrid();
-randomizeBaseColors();
 requestAnimationFrame(frame);
 </script>
 </body>
